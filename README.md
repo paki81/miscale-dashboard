@@ -197,6 +197,8 @@ unit, the language and the tolerance for recognizing people are changed in the w
 | `MISCALE_WEBHOOK_URL` | empty | POST a JSON message for every weigh-in |
 | `MISCALE_TELEGRAM_TOKEN` | empty | Bot token from [@BotFather](https://t.me/BotFather) |
 | `MISCALE_TELEGRAM_CHAT_ID` | empty | Chat that receives the messages |
+| `MISCALE_TELEGRAM_FORMAT` | `rich` | Rich Messages with compact tables and expandable details; `html` uses classic HTML |
+| `MISCALE_TELEGRAM_LIVE` | `on` | Live drafts in private chats while waiting for impedance or generating a notified analysis; `off` disables previews |
 | `MISCALE_NOTIFY_WAIT` | `25` | Seconds to wait for the impedance before notifying |
 | `MISCALE_AI_API_KEY` | empty | Turns on the [AI weekly analysis](#ai-weekly-analysis-optional) |
 | `MISCALE_AI_BASE_URL` | `https://api.openai.com/v1` | Any OpenAI-compatible API |
@@ -230,7 +232,24 @@ BMI 25.7 · Visceral fat 15 · BMR 1,649 kcal
 Impedance 478 Ω
 ```
 
-The webhook receives the same text plus the raw data, so you can use it from n8n, Node-RED,
+Telegram uses [Rich Messages](https://core.telegram.org/bots/api#sendrichmessage) with the weight
+in bold, a compact summary table, expandable measurement details and an **Open dashboard** button
+when `MISCALE_PUBLIC_URL` is set to an HTTP(S) URL. English, Portuguese and Italian are supported;
+only available metrics are shown. If the rich API is unavailable, the notifier falls back to classic
+HTML. Set `MISCALE_TELEGRAM_FORMAT=html` to choose classic HTML explicitly.
+
+With `MISCALE_TELEGRAM_LIVE=on`, a private chat gets an ephemeral preview after the weight stabilizes
+and while impedance is pending, followed by one permanent result. A result that already contains
+impedance is sent immediately. Notified weekly analyses also stream as drafts while the model
+writes them. Manual analyses retain their existing behavior: use `send=true` on
+`POST /api/analyses/run` to notify them. Previews are coalesced to at most one update per two seconds
+per session, refreshed during long waits, and closed before sending the permanent message. Drafts
+are private-chat-only; groups and channels receive just the final result. Telegram's `retry_after`
+cooldown is respected, and ambiguous network failures are not retried to avoid duplicate messages.
+Very long analysis text is shortened in Telegram; the full text stays in the dashboard. The button
+must point to an address reachable by the recipient: a LAN URL works only from that network or VPN.
+
+The webhook still receives the original plain text plus the raw data, so you can use it from n8n, Node-RED,
 Home Assistant (`/api/webhook/<id>`) or anything else that accepts JSON:
 
 ```json
