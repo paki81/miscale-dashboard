@@ -288,6 +288,8 @@ def patch_measurement(mid: int, patch: MeasurementPatch):
         raise HTTPException(404)
     if patch.profile_id is not None and not db.profile(patch.profile_id):
         raise HTTPException(404, "profile not found")
+    if patch.profile_id == m["profile_id"]:
+        return m
     db.update(mid, profile_id=patch.profile_id,
               metrics=metrics_for(db, patch.profile_id, m["weight_kg"], m["impedance"], m["measured_at"]))
     return db.get(mid)

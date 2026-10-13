@@ -246,6 +246,18 @@ def test_profile_notification_fields(tmp_path):
         assert p["notify"] is True and p["telegram_chat_id"] is None
 
 
+def test_reassigning_same_profile_keeps_exported_metrics(tmp_path):
+    c, main = client(tmp_path)
+    with c:
+        p = c.post("/api/profiles", json={"name": "Alex", "height_cm": 178, "birth": "1990-01-01"}).json()
+        metrics = {"bmi": 24.9, "body_fat": 23.9, "water": 52.1}
+        mid = main.db.insert({"measured_at": "2024-01-01T08:00:00", "weight_kg": 71,
+                              "impedance": None, "profile_id": p["id"], "metrics": metrics,
+                              "address": "IMPORT:ZEPP_LIFE"})
+        m = c.patch(f"/api/measurements/{mid}", json={"profile_id": p["id"]}).json()
+        assert m["metrics"] == metrics
+
+
 def test_db_migrates_profiles_without_notification_columns(tmp_path):
     import sqlite3
 
