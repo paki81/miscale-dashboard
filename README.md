@@ -197,7 +197,7 @@ unit, the language and the tolerance for recognizing people are changed in the w
 | `MISCALE_WEBHOOK_URL` | empty | POST a JSON message for every weigh-in |
 | `MISCALE_TELEGRAM_TOKEN` | empty | Bot token from [@BotFather](https://t.me/BotFather) |
 | `MISCALE_TELEGRAM_CHAT_ID` | empty | Chat that receives the messages |
-| `MISCALE_TELEGRAM_FORMAT` | `rich` | Rich Messages with compact tables and expandable details; `html` uses classic HTML |
+| `MISCALE_TELEGRAM_FORMAT` | `rich` | `rich` for structured messages, `html` for classic text, `photo` for styled PNG cards with text previews |
 | `MISCALE_TELEGRAM_LIVE` | `on` | Live drafts in private chats while waiting for impedance or generating a notified analysis; `off` disables previews |
 | `MISCALE_NOTIFY_WAIT` | `25` | Seconds to wait for the impedance before notifying |
 | `MISCALE_AI_API_KEY` | empty | Turns on the [AI weekly analysis](#ai-weekly-analysis-optional) |
@@ -237,6 +237,24 @@ in bold, a compact summary table, expandable measurement details and an **Open d
 when `MISCALE_PUBLIC_URL` is set to an HTTP(S) URL. English, Portuguese and Italian are supported;
 only available metrics are shown. If the rich API is unavailable, the notifier falls back to classic
 HTML. Set `MISCALE_TELEGRAM_FORMAT=html` to choose classic HTML explicitly.
+
+Set `MISCALE_TELEGRAM_FORMAT=photo` for final PNG cards styled with CSS: Sora headings, Manrope
+body text, cream backgrounds and the green/orange palette inspired by [Geopieno](https://www.geopieno.it/app/).
+The renderer uses the `convert` executable from ImageMagick; it adds no Python dependency.
+The default Docker image does not include ImageMagick, so it retains the text fallback unless
+you provide a renderer-capable image. The default compose file is unchanged.
+Fonts are downloaded from Geopieno's public assets on first use and cached in `telegram-fonts/`
+next to the database. No measurement data is sent to the font host. Manrope and Sora are open-source
+fonts distributed under the SIL Open Font License. Customize `app/telegram-card.css` for colors
+and typography; it styles a generated SVG rather than a web page. Rendering runs off the event loop
+with resource and timeout limits, and no bot credentials are inherited by the converter process.
+
+In photo mode, drafts remain textual and the final weigh-in or notified analysis is sent with
+`sendPhoto`, an accessible text caption and the dashboard button. Images have no expandable
+sections. All available measurement metrics appear on the card; overly long analysis text is
+shortened, while the full text stays in the dashboard. If fonts or the renderer are unavailable,
+or Telegram explicitly rejects the photo, the notifier falls back to rich/classic text.
+Ambiguous upload/network failures are not retried, to avoid duplicate messages.
 
 With `MISCALE_TELEGRAM_LIVE=on`, a private chat gets an ephemeral preview after the weight stabilizes
 and while impedance is pending, followed by one permanent result. A result that already contains
