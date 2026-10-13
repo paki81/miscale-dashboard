@@ -54,11 +54,24 @@ def test_prompt_language():
         assert json.loads(msgs[1]["content"].split("\n", 1)[1]) == data
 
 
+def test_italian_prompt():
+    data = {"week": {}}
+    msgs = analysis.messages(data, "it")
+    assert "Scrivi in italiano" in msgs[0]["content"]
+    assert "Cosa è migliorato" in msgs[0]["content"]
+    assert "non è un parere medico" in msgs[0]["content"]
+    assert msgs[1]["content"].startswith("Dati della bilancia per la settimana (JSON):\n")
+    assert json.loads(msgs[1]["content"].split("\n", 1)[1]) == data
+
+
 def test_language_and_switches(monkeypatch):
     monkeypatch.setattr(analysis, "LANG", "pt-br")
     assert analysis.lang() == "pt-BR"
     monkeypatch.setattr(analysis, "LANG", "en")
     assert analysis.lang() == "en"
+    for language in ("it", "it-IT"):
+        monkeypatch.setattr(analysis, "LANG", language)
+        assert analysis.lang() == "it"
     for key, flag, on in (("", "", False), ("sk-x", "", True), ("", "true", True), ("sk-x", "false", False)):
         monkeypatch.setattr(analysis, "API_KEY", key)
         monkeypatch.setattr(analysis, "ENABLED", flag)

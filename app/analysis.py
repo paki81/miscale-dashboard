@@ -9,7 +9,7 @@ local server that needs no key) is set.
 - MISCALE_AI_BASE_URL: default https://api.openai.com/v1.
 - MISCALE_AI_MODEL: model name; a comma-separated list is tried in order.
 - MISCALE_AI_WEEKDAY / MISCALE_AI_HOUR: when the weekly analysis runs (default Saturday 9:00).
-- MISCALE_AI_LANG: language of the text, en or pt-BR (default MISCALE_LANG).
+- MISCALE_AI_LANG: language of the text, en, pt-BR or it (default MISCALE_LANG).
 
 Only the numbers below are sent to the provider: the week's weigh-ins and body composition,
 the averages of the previous weeks, and the person's first name, age, height and sex.
@@ -61,7 +61,8 @@ def enabled() -> bool:
 
 
 def lang() -> str:
-    return "pt-BR" if LANG.lower().startswith("pt") else "en"
+    language = LANG.lower()
+    return "pt-BR" if language.startswith("pt") else "it" if language.startswith("it") else "en"
 
 
 # ---------- Prompt ----------
@@ -103,11 +104,30 @@ Escreva em português do Brasil, falando com a pessoa ("você"). Regras:
 - Isto não é orientação médica: não faça diagnóstico, não cite doenças nem remédios e só
   sugira um profissional se algo parecer fora do normal.
 - Use a unidade dos dados. No máximo uns 1200 caracteres. Sem saudação e sem despedida.""",
+    "it": """Sei un coach del benessere cordiale e concreto. Leggi i dati di una persona da una
+bilancia a bioimpedenza (Xiaomi Mi Body Composition Scale 2) e scrivi il riepilogo settimanale.
+Conosci solo questi numeri: nulla sul suo allenamento, sonno o alimentazione.
+
+Scrivi in italiano, rivolgendoti alla persona con il "tu". Regole:
+- Solo testo semplice: niente markdown, asterischi, cancelletti o tabelle. Gli elenchi iniziano
+  con "• " e non sono numerati.
+- Inizia con 2 o 3 frasi che riassumono la settimana: cosa è cambiato nel peso e nella composizione corporea.
+- Poi le sezioni "Cosa è migliorato" e "Cosa richiede attenzione", ciascun titolo su una riga
+  senza due punti, seguito da un massimo di 3 brevi punti con numeri.
+- Termina con la sezione "Per la prossima settimana" e 2 o 3 suggerimenti pratici e generali
+  (routine delle pesate, attività fisica, proteine, acqua, sonno).
+- La bioimpedenza varia con idratazione, pasti e orario: considera medie e tendenze delle settimane,
+  mai un singolo giorno. Se le pesate sono poche o mancano confronti, dillo e suggerisci di
+  pesarsi ogni giorno alla stessa ora (al mattino, prima di mangiare, a piedi nudi).
+- Questo non è un parere medico: non fare diagnosi, non citare malattie o farmaci e suggerisci
+  un professionista solo se qualcosa sembra insolito.
+- Usa l'unità dei dati. Al massimo circa 1200 caratteri. Nessun saluto iniziale o finale.""",
 }
 
 USER = {
     "en": "Scale data for the week (JSON):\n",
     "pt-BR": "Dados da balança na semana (JSON):\n",
+    "it": "Dati della bilancia per la settimana (JSON):\n",
 }
 
 

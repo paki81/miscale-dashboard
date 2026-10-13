@@ -415,7 +415,7 @@ tr.new td { animation: rowIn 2.4s ease; }
   <form onsubmit="saveSettings(event)">
     <h2 data-t="settings"></h2>
     <label data-t="language"></label>
-    <select id="sLang"><option value="auto" data-t="langAuto"></option><option value="en">English</option><option value="pt-BR">Português (Brasil)</option></select>
+    <select id="sLang"><option value="auto" data-t="langAuto"></option><option value="en">English</option><option value="pt-BR">Português (Brasil)</option><option value="it">Italiano</option></select>
     <label data-t="unitLabel"></label>
     <select id="sUnit"><option value="kg">kg</option><option value="lb">lb</option></select>
     <label id="sTolLabel"></label><input id="sTol" type="number" step="0.5" min="0.5" max="50">
@@ -513,12 +513,58 @@ const STRINGS = {
     analysisNoData: "Ainda não há pesagem nos últimos 7 dias para analisar.", analysisBusy: "Uma análise já está sendo escrita.",
     analysisFailed: "A análise falhou: {detail}",
   },
+  it: {
+    connecting: "connessione in corso", live: "Connesso", reconnecting: "riconnessione in corso", btError: "Errore Bluetooth", scannerOff: "scanner disattivato",
+    theme: "Tema", themeAuto: "Automatico (segue il sistema)", themeLight: "Chiaro", themeDark: "Scuro",
+    settings: "Impostazioni", profile: "Profilo", addPerson: "+ Persona", newPerson: "Nuova persona",
+    scale: "Bilancia", stepOn: "Sali sulla bilancia", measuring: "Misurazione…", stableMeasuring: "Peso stabile · misurazione della composizione corporea…",
+    ready: "Pronto · impedenza {imp} Ω", done: "Misurazione completata", unknownPerson: "Persona non riconosciuta dal peso",
+    lastMeasurement: "Ultima misurazione", compareWith: "Confronta con", previous: "precedente",
+    d7: "7 g", d30: "30 g", d90: "90 g", y1: "1 anno", all: "Tutto",
+    noMeasurements: "Nessuna misurazione disponibile.", arrowsSince: "Frecce rispetto a {when}. Il verde indica un miglioramento, il rosso un peggioramento.",
+    noRef: "Non ci sono ancora pesate di almeno {days} giorni fa da confrontare.",
+    needHeight: "Imposta altezza e data di nascita nel Profilo per calcolare la composizione corporea.",
+    noImpedance: "Nessuna impedenza in questa misurazione (sali a piedi nudi e attendi che termini).",
+    showMore: "Mostra altro", weight: "Peso", avg7: "Media di 7 giorni", bodyFat: "Grasso corporeo", history: "Cronologia", everyone: "tutte le persone",
+    date: "Data", muscle: "Muscoli", water: "Acqua", visceral: "Viscerale", who: "Persona", unknown: "sconosciuto",
+    deleteMeasurement: "Eliminare questa misurazione?", delete: "Elimina",
+    bmi: "IMC", fatMass: "Massa grassa", protein: "Proteine", bone: "Massa ossea", visceralFat: "Grasso viscerale",
+    bmr: "Metabolismo basale", impedance: "Impedenza",
+    readingScale: "Lettura della bilancia…", stable: "Stabile", composition: "Composizione",
+    stableKeep: "Peso stabile · misurazione della composizione corporea, resta sulla bilancia…", notRecognized: "Persona non riconosciuta",
+    closeHint: "Si chiude automaticamente tra poco · tocca per mantenerla aperta", close: "Chiudi",
+    install: "Installa app", iosHint: "Installa sul tuo iPhone: tocca Condividi {icon} e poi “Aggiungi alla schermata Home”.",
+    since: "{d} rispetto a {when}",
+    resNotSaved: "Misurazione non salvata.", resUnknown: "Persona non riconosciuta dal peso: assegnala nella cronologia.",
+    resNoHeight: "Imposta altezza e data di nascita nel Profilo per vedere la composizione corporea.",
+    resNoImp: "Nessuna impedenza: sali a piedi nudi e attendi la fine per vedere grasso corporeo e muscoli.",
+    choosePhoto: "Scegli foto…", removePhoto: "Rimuovi foto", name: "Nome", heightCm: "Altezza (cm)", birth: "Data di nascita",
+    sex: "Sesso", male: "Maschile", female: "Femminile", refWeight: "Peso approssimativo ({unit}), per riconoscere la prima pesata",
+    sexNote: "Altezza, età e sesso sono utilizzati nelle formule della composizione corporea.",
+    deleteProfile: "Elimina profilo", cancel: "Annulla", save: "Salva",
+    confirmDeleteProfile: "Eliminare il profilo di {name}? Le sue misurazioni diventeranno \"sconosciute\".",
+    photoFailed: "La foto non è stata caricata: ", photoOpenFailed: "Impossibile aprire questa immagine", photoConvertFailed: "Impossibile convertire la foto",
+    language: "Lingua", langAuto: "Automatico (browser)", unitLabel: "Unità di peso",
+    tolerance: "Tolleranza per riconoscere una persona dal peso ({unit})",
+    tolNote: "La pesata viene assegnata al profilo con il peso più vicino, entro questa tolleranza. Altrimenti viene salvata come \"sconosciuta\" e puoi assegnarla nella cronologia.",
+    analysisTitle: "Analisi settimanale", analysisRange: "{start} – {end}", generateNow: "Genera ora", writing: "Scrittura in corso…",
+    analysisEmpty: "Nessuna analisi disponibile. La prossima sarà scritta {day} alle {hour}, oppure generane una ora.",
+    analysisMeta: "Scritta {when} · {model}",
+    analysisOff: "Un breve riepilogo settimanale delle tue tendenze, scritto da un modello IA (OpenAI, OpenRouter o Ollama locale). Per attivarlo, imposta {var} sul server.",
+    analysisHowTo: "Come attivarla", analysisDocs: "https://github.com/BrOrlandi/miscale-dashboard#ai-weekly-analysis-optional",
+    analysisNoData: "Nessuna pesata negli ultimi 7 giorni da analizzare.", analysisBusy: "È già in corso la scrittura di un’analisi.",
+    analysisFailed: "L’analisi non è riuscita: {detail}",
+  },
 };
 
 function storedLang() { try { return localStorage.getItem("lang") || "auto"; } catch { return "auto"; } }
 function resolveLang(pref) {
   if (pref !== "auto" && STRINGS[pref]) return pref;
-  return (navigator.languages || [navigator.language]).some((l) => /^pt/i.test(l)) ? "pt-BR" : "en";
+  for (const language of navigator.languages || [navigator.language]) {
+    if (/^pt/i.test(language)) return "pt-BR";
+    if (/^it/i.test(language)) return "it";
+  }
+  return "en";
 }
 let lang = resolveLang(storedLang());
 const t = (key, vars = {}) => (STRINGS[lang][key] ?? STRINGS.en[key] ?? key).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
@@ -542,7 +588,7 @@ try { current = +localStorage.getItem("profile") || null; } catch {}
 const LB = 0.45359237;
 const unit = () => settings.unit === "lb" ? "lb" : "kg";
 const mass = (kg) => kg == null ? null : (unit() === "lb" ? kg / LB : kg);   // display value for a weight in kg
-const locale = () => lang === "pt-BR" ? "pt-BR" : "en-US";
+const locale = () => ({ "pt-BR": "pt-BR", it: "it-IT" }[lang] || "en-US");
 const fmt = (v, d = 1) => v == null ? "–" : Number(v).toLocaleString(locale(), { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtDate = (s) => new Date(s).toLocaleString(locale(), { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
 const num = (v, dec) => dec === 0 ? Math.round(v).toLocaleString(locale()) : fmt(v, dec);

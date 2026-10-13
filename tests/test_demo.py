@@ -62,6 +62,34 @@ def test_body_js_matches_body_py():
             assert js[k] == pytest.approx(py[k], abs=0.011 if isinstance(py[k], float) else 1), (case, k)
 
 
+@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
+def test_dashboard_translations():
+    html = (ROOT / "app" / "static" / "index.html").read_text()
+    translations = html.split("const STRINGS = ", 1)[1].split("function applyStrings()", 1)[0]
+    locale = re.search(r"const locale = .*;", html).group()
+    script = (
+        "const vm = require('vm'); const source = JSON.parse(require('fs').readFileSync(0, 'utf8'));"
+        "const languages = [['it-IT', 'en'], ['pt-BR', 'it'], ['en-US'], ['fr-FR'], ['it', 'pt-BR']];"
+        "const results = languages.map((languages) => vm.runInNewContext(source + "
+        "'\\nJSON.stringify({strings: STRINGS, lang, locale: locale(), label: t(\"weight\"), "
+        "explicit: resolveLang(\"it\"), fallback: resolveLang(\"unknown\")})', "
+        "{navigator: {languages}, localStorage: {getItem: () => null}}));"
+        "console.log(JSON.stringify(results));"
+    )
+    source = "const STRINGS = " + translations + locale
+    out = subprocess.run(["node", "-e", script], input=json.dumps(source),
+                         capture_output=True, text=True, check=True).stdout
+    results = [json.loads(r) for r in json.loads(out)]
+    assert [r["lang"] for r in results] == ["it", "pt-BR", "en", "en", "it"]
+    assert results[0]["locale"] == "it-IT" and results[0]["label"] == "Peso"
+    assert all(r["explicit"] == "it" for r in results)
+    strings = results[0]["strings"]
+    assert strings["it"].keys() == strings["en"].keys() == strings["pt-BR"].keys()
+    for key, value in strings["en"].items():
+        assert re.findall(r"\{\w+\}", strings["it"][key]) == re.findall(r"\{\w+\}", value), key
+    assert '<option value="it">Italiano</option>' in html
+
+
 def test_seed_demo_gives_alex_the_photo(tmp_path):
     seed_demo.main(str(tmp_path / "demo.db"))
     rows = dict(sqlite3.connect(tmp_path / "demo.db").execute("SELECT name, photo FROM profiles").fetchall())

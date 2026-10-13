@@ -57,7 +57,7 @@ live demo and the soundtrack are all generated from [video/](video/README.md).
   OpenRouter, or a local Ollama) reads the week's numbers and writes a short summary: what
   improved, what needs attention, and what to try next week. It is typed into the dashboard
   live as the model writes it, and goes out with the notifications.
-- English and Portuguese (Brazil); kg or lb; light, dark or automatic theme.
+- English, Portuguese (Brazil) and Italian; kg or lb; light, dark or automatic theme.
 - **Installable on your phone** as an app (PWA), with offline shell.
 - One container, SQLite, no external services. Chart.js is bundled, so it works offline.
 
@@ -192,7 +192,7 @@ unit, the language and the tolerance for recognizing people are changed in the w
 | `TZ` | `UTC` | Timezone used for measurement times |
 | `MISCALE_SCALE_MAC` | empty | Only accept this scale. Empty accepts any XMTZC05HM in range (useful if a neighbor has one too) |
 | `MISCALE_DB` | `/data/miscale.db` | SQLite database path; photos go in `photos/` next to it |
-| `MISCALE_LANG` | `en` | Language of notifications: `en` or `pt-BR` |
+| `MISCALE_LANG` | `en` | Language of notifications: `en`, `pt-BR` or `it` |
 | `MISCALE_PUBLIC_URL` | empty | Dashboard link appended to notifications |
 | `MISCALE_WEBHOOK_URL` | empty | POST a JSON message for every weigh-in |
 | `MISCALE_TELEGRAM_TOKEN` | empty | Bot token from [@BotFather](https://t.me/BotFather) |
@@ -203,7 +203,7 @@ unit, the language and the tolerance for recognizing people are changed in the w
 | `MISCALE_AI_MODEL` | `gpt-5.4-mini` | Model, or a comma-separated list tried in order |
 | `MISCALE_AI_ENABLED` | empty | `true` turns the analysis on without a key (local Ollama) |
 | `MISCALE_AI_WEEKDAY` / `MISCALE_AI_HOUR` | `5` / `9` | When the weekly analysis runs (0 = Monday; default Saturday 9:00) |
-| `MISCALE_AI_LANG` | `MISCALE_LANG` | Language of the analysis: `en` or `pt-BR` |
+| `MISCALE_AI_LANG` | `MISCALE_LANG` | Language of the analysis: `en`, `pt-BR` or `it` |
 | `MISCALE_SCANNER` | `on` | `off` disables Bluetooth (remote scanners, development and demos) |
 | `MISCALE_INGEST_TOKEN` | empty | If set, `/api/ingest` requires the `X-Ingest-Token` header; the dashboard has no login |
 | `MISCALE_LOG_LEVEL` | `INFO` | Python log level |

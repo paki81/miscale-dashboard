@@ -47,6 +47,19 @@ TEXT = {
         "date": "%d/%m %H:%M",
         "analysis": "🧠 Análise da semana · {name} ({start} a {end})", "day": "%d/%m",
     },
+    "it": {
+        "unknown": "Pesata di {w} senza proprietario: il peso non corrisponde a nessun profilo.\n"
+                   "Scegli la persona nella cronologia.",
+        "since": "{d} rispetto al {when}", "avg": "media di 7 giorni {w}",
+        "fat": "Grasso corporeo {fat}% ({mass}) · Muscoli {muscle}",
+        "water": "Acqua {water}% · Proteine {protein}% · Massa ossea {bone}",
+        "bmi": "IMC {bmi} · Grasso viscerale {visceral} · Metabolismo basale {bmr} kcal",
+        "impedance": "Impedenza {imp} Ω",
+        "no_impedance": "Nessuna impedenza (sali a piedi nudi e attendi la fine della misurazione).",
+        "no_height": "Imposta altezza e data di nascita nel profilo per vedere la composizione corporea.",
+        "date": "%d/%m %H:%M",
+        "analysis": "Analisi settimanale · {name} ({start} – {end})", "day": "%d/%m",
+    },
 }
 
 
@@ -56,7 +69,7 @@ def enabled() -> bool:
 
 def _num(v, d=1, lang=LANG):
     s = f"{v:,.{d}f}"
-    if lang.startswith("pt"):
+    if lang.startswith(("pt", "it")):
         s = s.replace(",", "X").replace(".", ",").replace("X", ".")
     return s
 
