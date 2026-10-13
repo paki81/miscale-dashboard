@@ -67,22 +67,35 @@ waiting: dict[int, asyncio.Event] = {}
 
 async def notify_when_ready(mid: int):
     event = waiting.setdefault(mid, asyncio.Event())
+    live = notify.TelegramLive()
     try:
-        await asyncio.wait_for(event.wait(), timeout=NOTIFY_WAIT)
+        m = db.get(mid)
+        if not m:
+            return
+        profile = db.profile(m["profile_id"]) if m["profile_id"] else None
+        if not profile:
+            # A weight that matches nobody (an object, a pet, a guest) stays in the history only.
+            log.info("measurement %s has no owner (%.2f kg): not notifying", mid, m["weight_kg"])
+            return
+        if not m["impedance"]:
+            history = [h for h in db.list(m["profile_id"], limit=50) if h["id"] != mid]
+            live.update(notify.message(m, profile, history, settings()["unit"]), measurement=m,
+                        profile=profile, history=history, unit=settings()["unit"], pending=True)
+            await asyncio.wait_for(event.wait(), timeout=NOTIFY_WAIT)
     except TimeoutError:
         pass
     finally:
         waiting.pop(mid, None)
+        await live.close()
     m = db.get(mid)
     if not m:
         return
     profile = db.profile(m["profile_id"]) if m["profile_id"] else None
     if not profile:
-        # A weight that matches nobody (an object, a pet, a guest) stays in the history only.
-        log.info("measurement %s has no owner (%.2f kg): not notifying", mid, m["weight_kg"])
         return
     history = [h for h in db.list(m["profile_id"], limit=50) if h["id"] != mid]
-    await notify.send(notify.message(m, profile, history, settings()["unit"]), m, profile)
+    unit = settings()["unit"]
+    await notify.send(notify.message(m, profile, history, unit), m, profile, unit=unit, history=history)
 
 
 def on_reading(r: Reading):
@@ -96,6 +109,7 @@ def on_reading(r: Reading):
         loop.create_task(hub.send({"type": "measurement", **result}))
         mid = result["measurement"]["id"]
         if result["event"] == "saved" and notify.enabled():
+            waiting.setdefault(mid, asyncio.Event())
             loop.create_task(notify_when_ready(mid))
         if result["measurement"]["impedance"] and mid in waiting:
             waiting[mid].set()
@@ -122,10 +136,17 @@ async def run_analysis(profile_id: int, week_end: date, kind: str, send: bool = 
     loop = asyncio.get_running_loop()
     # The model writes in a thread; its pieces go out over the WebSocket in order.
     pieces: asyncio.Queue = asyncio.Queue()
+    live = notify.TelegramLive()
 
     async def pump():
+        partial = ""
         while (item := await pieces.get()) is not None:
             await hub.send({"type": "analysis_delta", "profile_id": profile_id, "text": item[0], "reset": item[1]})
+            partial = item[0] if item[1] else partial + item[0]
+            if send and notify.telegram_enabled():
+                preview = {"week_start": data["week"]["start"], "week_end": data["week"]["end"],
+                           "text": analysis.clean(partial), "lang": analysis.lang()}
+                live.update(notify.analysis_message(preview, p, analysis.lang()), profile=p, analysis=preview)
 
     pumping = asyncio.create_task(pump())
     try:
@@ -139,6 +160,7 @@ async def run_analysis(profile_id: int, week_end: date, kind: str, send: bool = 
     finally:
         pieces.put_nowait(None)
         await pumping
+        await live.close()
         writing.discard(profile_id)
     start, end = analysis.week_bounds(week_end)
     aid = db.add_analysis({"profile_id": profile_id, "week_start": start.isoformat(), "week_end": end.isoformat(),

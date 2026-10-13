@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import os
 
@@ -134,3 +135,94 @@ def test_ingest_updates_session_with_impedance(ingest_client):
         assert c.post("/api/ingest", json={"data": raw.hex()}).status_code == 200
     measurements = main.db.list()
     assert len(measurements) == 1 and measurements[0]["impedance"] == 500
+
+
+@pytest.mark.parametrize("impedance", [None, 500])
+def test_notifications_send_without_delaying_complete_measurements(ingest_client, monkeypatch, impedance):
+    c, main = ingest_client
+    calls, done = [], asyncio.Event()
+
+    class Live:
+        def update(self, text, **kwargs):
+            calls.append(("draft", kwargs["measurement"]["impedance"]))
+
+        async def close(self):
+            calls.append(("closed", None))
+
+    async def send(text, measurement=None, profile=None, **kwargs):
+        calls.append(("final", measurement["impedance"]))
+        done.set()
+        return True
+
+    async def wait():
+        await asyncio.wait_for(done.wait(), 1)
+
+    monkeypatch.setattr(main.notify, "enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "TelegramLive", Live, raising=False)
+    monkeypatch.setattr(main.notify, "send", send)
+    monkeypatch.setattr(main, "NOTIFY_WAIT", 60 if impedance else 0)
+    c.post("/api/profiles", json={"name": "Alex", "height_cm": 178, "birth": "1990-01-01"})
+    data = {"data": packet(80, impedance=impedance, stabilized=True).hex()}
+    assert c.post("/api/ingest", json=data).status_code == 200
+    c.portal.call(wait)
+    assert calls[-2:] == [("closed", None), ("final", impedance)]
+    assert ([call for call in calls if call[0] == "draft"] == [("draft", None)]) is (impedance is None)
+    assert main.waiting == {}
+
+
+def test_impedance_update_completes_same_live_notification(ingest_client, monkeypatch):
+    c, main = ingest_client
+    started, done = asyncio.Event(), asyncio.Event()
+    final = []
+
+    class Live:
+        def update(self, *args, **kwargs):
+            started.set()
+
+        async def close(self):
+            pass
+
+    async def send(text, measurement=None, profile=None, **kwargs):
+        final.append(measurement)
+        done.set()
+        return True
+
+    async def wait(event):
+        await asyncio.wait_for(event.wait(), 1)
+
+    monkeypatch.setattr(main.notify, "enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "TelegramLive", Live, raising=False)
+    monkeypatch.setattr(main.notify, "send", send)
+    monkeypatch.setattr(main, "NOTIFY_WAIT", 60)
+    c.post("/api/profiles", json={"name": "Alex"})
+    assert c.post("/api/ingest", json={"data": packet(80, stabilized=True).hex()}).status_code == 200
+    c.portal.call(wait, started)
+    complete = {"data": packet(80, impedance=500, stabilized=True).hex()}
+    assert c.post("/api/ingest", json=complete).status_code == 200
+    c.portal.call(wait, done)
+    assert c.post("/api/ingest", json=complete).status_code == 200
+    assert len(final) == 1 and final[0]["impedance"] == 500
+    assert len(main.db.list()) == 1 and main.waiting == {}
+
+
+def test_unrecognized_weigh_in_is_not_notified(ingest_client, monkeypatch):
+    c, main = ingest_client
+    calls = []
+
+    class Live:
+        def update(self, *args, **kwargs):
+            calls.append("draft")
+
+        async def close(self):
+            pass
+
+    async def send(*args, **kwargs):
+        calls.append("final")
+
+    monkeypatch.setattr(main.notify, "enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "TelegramLive", Live)
+    monkeypatch.setattr(main.notify, "send", send)
+    assert c.post("/api/ingest", json={"data": packet(80, stabilized=True).hex()}).status_code == 200
+    c.portal.call(asyncio.sleep, 0)
+    assert len(main.db.list()) == 1 and main.db.list()[0]["profile_id"] is None
+    assert calls == [] and main.waiting == {}

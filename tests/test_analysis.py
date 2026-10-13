@@ -262,3 +262,98 @@ def test_weekly_analysis_is_notified(tmp_path, provider, monkeypatch):
         c.portal.call(main.run_analysis, p["id"], date.today(), "weekly", True)
         assert main.db.has_weekly(p["id"], date.today().isoformat())
     assert len(sent) == 1 and sent[0][1:] == ("Alex", "weekly") and TEXT in sent[0][0]
+
+
+@pytest.mark.parametrize("send", [True, False])
+def test_analysis_telegram_stream_respects_send_flag(tmp_path, provider, monkeypatch, send):
+    monkeypatch.setattr(analysis, "MODELS", ["stream"])
+    c, main = client(tmp_path)
+    updates, closed, finals = [], [], []
+
+    class Live:
+        def update(self, text, **kwargs):
+            updates.append(kwargs["analysis"]["text"])
+
+        async def close(self):
+            closed.append(True)
+
+    async def fake_send(*args, **kwargs):
+        assert closed
+        finals.append(kwargs["analysis"]["text"])
+        return True
+
+    monkeypatch.setattr(main.notify, "TelegramLive", Live, raising=False)
+    monkeypatch.setattr(main.notify, "telegram_enabled", lambda: True, raising=False)
+    monkeypatch.setattr(main.notify, "enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "send", fake_send)
+    with c:
+        p = c.post("/api/profiles", json={"name": "Alex"}).json()
+        add_week(main, p["id"])
+        result = c.portal.call(main.run_analysis, p["id"], date.today(), "manual", send)
+    assert result["text"] == TEXT and closed == [True]
+    if send:
+        assert len(updates) > 1 and updates[-1] == TEXT
+        assert finals == [TEXT]
+    else:
+        assert updates == [] and finals == []
+
+
+def test_failed_analysis_closes_live_preview_without_final_notification(tmp_path, provider, monkeypatch):
+    monkeypatch.setattr(analysis, "MODELS", ["down"])
+    c, main = client(tmp_path)
+    closed, sent = [], []
+
+    class Live:
+        def update(self, *args, **kwargs):
+            pass
+
+        async def close(self):
+            closed.append(True)
+
+    async def send(*args, **kwargs):
+        sent.append(True)
+
+    monkeypatch.setattr(main.notify, "TelegramLive", Live)
+    monkeypatch.setattr(main.notify, "send", send)
+    with c:
+        p = c.post("/api/profiles", json={"name": "Alex"}).json()
+        add_week(main, p["id"])
+        response = c.post(f"/api/analyses/run?profile_id={p['id']}&send=true")
+    assert response.status_code == 502
+    assert closed == [True] and sent == [] and main.writing == set()
+    assert main.db.analyses(p["id"]) == []
+
+
+def test_live_analysis_replaces_failed_provider_partial_text(tmp_path, monkeypatch):
+    monkeypatch.setattr(analysis, "enabled", lambda: True)
+
+    def generate(data, on_delta, language=None):
+        on_delta("Old partial", True)
+        on_delta("Fresh", True)
+        on_delta(" answer", False)
+        return "Fresh answer", "fallback-model"
+
+    monkeypatch.setattr(analysis, "generate", generate)
+    c, main = client(tmp_path)
+    updates = []
+
+    class Live:
+        def update(self, text, **kwargs):
+            updates.append(kwargs["analysis"]["text"])
+
+        async def close(self):
+            pass
+
+    async def send(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr(main.notify, "TelegramLive", Live)
+    monkeypatch.setattr(main.notify, "telegram_enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "send", send)
+    with c:
+        p = c.post("/api/profiles", json={"name": "Alex"}).json()
+        add_week(main, p["id"])
+        response = c.post(f"/api/analyses/run?profile_id={p['id']}&send=true")
+    assert response.status_code == 200 and response.json()["text"] == "Fresh answer"
+    assert updates == ["Old partial", "Fresh", "Fresh answer"]
