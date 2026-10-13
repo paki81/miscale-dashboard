@@ -226,3 +226,19 @@ def test_unrecognized_weigh_in_is_not_notified(ingest_client, monkeypatch):
     c.portal.call(asyncio.sleep, 0)
     assert len(main.db.list()) == 1 and main.db.list()[0]["profile_id"] is None
     assert calls == [] and main.waiting == {}
+
+
+def test_profile_updates_keep_exported_metrics_without_impedance(tmp_path):
+    c, main = client(tmp_path)
+    with c:
+        p = c.post("/api/profiles", json={"name": "Alex", "height_cm": 178, "birth": "1990-01-01"}).json()
+        metrics = {"bmi": 25.2, "body_fat": 20, "muscle_mass": 60}
+        imported = main.db.insert({"measured_at": "2024-01-01T08:00:00", "weight_kg": 80,
+                                   "impedance": None, "profile_id": p["id"], "metrics": metrics,
+                                   "address": "IMPORT:ZEPP_LIFE"})
+        native = main.db.insert({"measured_at": "2024-01-02T08:00:00", "weight_kg": 80,
+                                 "impedance": None, "profile_id": p["id"], "metrics": {"bmi": 25.2}})
+        response = c.put(f"/api/profiles/{p['id']}", json={"name": "Alex", "height_cm": 180, "birth": "1990-01-01"})
+        assert response.status_code == 200
+        assert main.db.get(imported)["metrics"] == metrics
+        assert main.db.get(native)["metrics"]["bmi"] != 25.2

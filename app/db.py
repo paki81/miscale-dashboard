@@ -6,6 +6,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+CSV_IMPORT = "IMPORT:ZEPP_LIFE"
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS measurements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

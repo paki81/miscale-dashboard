@@ -438,6 +438,7 @@ const STRINGS = {
     lastMeasurement: "Latest measurement", compareWith: "Compare with", previous: "previous",
     d7: "7 d", d30: "30 d", d90: "90 d", y1: "1 year", all: "All",
     noMeasurements: "No measurements yet.", arrowsSince: "Arrows compared with {when}. Green is good, red is bad.",
+    importedData: "Imported from Zepp Life. Missing export fields are left blank.",
     noRef: "No weigh-in {days} days old or more to compare with yet.",
     needHeight: "Set height and birth date in the Profile to calculate body composition.",
     noImpedance: "No impedance in this measurement (step on barefoot and wait until it finishes).",
@@ -480,6 +481,7 @@ const STRINGS = {
     lastMeasurement: "Última medição", compareWith: "Comparar com", previous: "anterior",
     d7: "7 d", d30: "30 d", d90: "90 d", y1: "1 ano", all: "Tudo",
     noMeasurements: "Nenhuma medição ainda.", arrowsSince: "Setas comparadas com {when}. Verde é bom, vermelho é ruim.",
+    importedData: "Importada do Zepp Life. Campos ausentes na exportação ficam vazios.",
     noRef: "Ainda não há pesagem com {days} dias ou mais para comparar.",
     needHeight: "Informe altura e nascimento no Perfil para calcular a composição corporal.",
     noImpedance: "Sem impedância nesta medição (suba descalço e espere o fim da medição).",
@@ -522,6 +524,7 @@ const STRINGS = {
     lastMeasurement: "Ultima misurazione", compareWith: "Confronta con", previous: "precedente",
     d7: "7 g", d30: "30 g", d90: "90 g", y1: "1 anno", all: "Tutto",
     noMeasurements: "Nessuna misurazione disponibile.", arrowsSince: "Frecce rispetto a {when}. Il verde indica un miglioramento, il rosso un peggioramento.",
+    importedData: "Importata da Zepp Life. I campi non esportati restano vuoti.",
     noRef: "Non ci sono ancora pesate di almeno {days} giorni fa da confrontare.",
     needHeight: "Imposta altezza e data di nascita nel Profilo per calcolare la composizione corporea.",
     noImpedance: "Nessuna impedenza in questa misurazione (sali a piedi nudi e attendi che termini).",
@@ -745,7 +748,8 @@ function renderLast(animate = false) {
   const notes = [];
   if (ref) notes.push(t("arrowsSince", { when: fmtDate(ref.measured_at) }));
   else if (cmpDays) notes.push(t("noRef", { days: cmpDays }));
-  if (!p?.height_cm || !p?.birth) notes.push(t("needHeight"));
+  if (m.address === "IMPORT:ZEPP_LIFE") notes.push(t("importedData"));
+  else if (!p?.height_cm || !p?.birth) notes.push(t("needHeight"));
   else if (!m.impedance) notes.push(t("noImpedance"));
   $("lastNote").textContent = notes.join(" ");
 }

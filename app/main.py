@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import analysis, notify
-from .db import DB
+from .db import CSV_IMPORT, DB
 from .scale import BODY_COMPOSITION, Reading, ScaleListener
 from .session import DEFAULT_TOLERANCE_KG, Session, guess_profile, metrics_for
 
@@ -302,6 +302,8 @@ class Profile(BaseModel):
 
 def recompute(profile_id: int):
     for m in db.list(profile_id, limit=100000):
+        if m.get("address") == CSV_IMPORT and not m["impedance"]:
+            continue
         db.update(m["id"], metrics=metrics_for(db, profile_id, m["weight_kg"], m["impedance"], m["measured_at"]))
 
 
