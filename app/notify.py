@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import secrets
+import subprocess
 import time
 import urllib.error
 import urllib.parse
@@ -145,6 +146,11 @@ def analysis_message(a: dict, profile: dict, lang: str = LANG) -> str:
     return "\n".join(lines)
 
 
+METRIC_FIELDS = (("body_fat", "%", 1), ("muscle_mass", "mass", 1), ("water", "%", 1), ("bmi", "", 1),
+                 ("protein", "%", 1), ("bone_mass", "mass", 1), ("fat_mass", "mass", 1),
+                 ("visceral_fat", "", 0), ("bmr", " kcal", 0))
+
+
 TELEGRAM_TEXT = {
     "en": {
         "measurement": "Weigh-in", "pending": "Stable weight · measuring body composition…",
@@ -198,12 +204,9 @@ def telegram_content(text: str, measurement: dict | None = None, profile: dict |
         if pending:
             paragraph(labels["pending"])
         else:
-            fields = (("body_fat", "%", 1), ("muscle_mass", "mass", 1), ("water", "%", 1), ("bmi", "", 1),
-                      ("protein", "%", 1), ("bone_mass", "mass", 1), ("fat_mass", "mass", 1),
-                      ("visceral_fat", "", 0), ("bmr", " kcal", 0))
             rows, details = [], []
             metrics = measurement.get("metrics") or {}
-            for index, ((field, suffix, decimals), label) in enumerate(zip(fields, labels["labels"], strict=True)):
+            for index, ((field, suffix, decimals), label) in enumerate(zip(METRIC_FIELDS, labels["labels"], strict=True)):
                 value = metrics.get(field)
                 if value is None:
                     continue
@@ -261,8 +264,23 @@ class TelegramError(Exception):
 
 
 def _post(url: str, payload: dict):
-    req = urllib.request.Request(url, data=json.dumps(payload).encode(),
-                                 headers={"Content-Type": "application/json"}, method="POST")
+    if isinstance(payload.get("photo"), bytes):
+        boundary = "miscale-" + secrets.token_hex(16)
+        parts = []
+        for name, value in payload.items():
+            parts.append(f"--{boundary}\r\n".encode())
+            if name == "photo":
+                parts.append(b'Content-Disposition: form-data; name="photo"; filename="card.png"\r\n'
+                             b'Content-Type: image/png\r\n\r\n' + value + b"\r\n")
+            else:
+                value = json.dumps(value) if isinstance(value, dict | list | bool) else str(value)
+                parts.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+        body = b"".join(parts) + f"--{boundary}--\r\n".encode()
+        content_type = f"multipart/form-data; boundary={boundary}"
+    else:
+        body = json.dumps(payload).encode()
+        content_type = "application/json"
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": content_type}, method="POST")
     with urllib.request.urlopen(req, timeout=15) as response:
         return response.read()
 
@@ -301,7 +319,18 @@ async def telegram(text: str, draft_id: int | None = None, **content) -> bool:
             label = TELEGRAM_TEXT.get(lang, TELEGRAM_TEXT["en"])["dashboard"]
             base["reply_markup"] = {"inline_keyboard": [[{"text": label, "url": PUBLIC_URL}]]}
     methods = []
-    if TELEGRAM_FORMAT == "rich" and _rich_available:
+    if TELEGRAM_FORMAT == "photo" and draft_id is None and content.get("profile") and (
+            content.get("measurement") or content.get("analysis")):
+        from .telegram_card import render
+
+        try:
+            image_content = {k: v for k, v in content.items() if k != "pending"}
+            image = await asyncio.to_thread(render, **image_content)
+            caption = text if len(text) <= 900 else text[:900] + "…"
+            methods.append(("sendPhoto", {**base, "photo": image, "caption": escape(caption), "parse_mode": "HTML"}))
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            log.warning("Telegram card rendering failed (%s); using text", type(exc).__name__)
+    if TELEGRAM_FORMAT in ("rich", "photo") and _rich_available:
         methods.append(("sendRichMessageDraft" if draft_id is not None else "sendRichMessage",
                         {**base, "rich_message": {"html": rich}}))
     methods.append(("sendMessageDraft" if draft_id is not None else "sendMessage",
@@ -312,6 +341,8 @@ async def telegram(text: str, draft_id: int | None = None, **content) -> bool:
             await asyncio.to_thread(_telegram_call, method, payload)
             return True
         except TelegramError as exc:
+            if method == "sendPhoto" and exc.code in (400, 404, 413, 501):
+                continue
             if method.startswith("sendRich") and exc.code in (400, 404, 501):
                 _rich_available = False
                 continue

@@ -1,11 +1,14 @@
 import asyncio
 import json
+import subprocess
 import urllib.error
+import xml.etree.ElementTree as ET
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
-from app import notify
+from app import notify, telegram_card
 
 
 def test_message_kg_and_lb():
@@ -290,3 +293,126 @@ def test_long_analysis_is_shortened_only_for_telegram():
     rich, classic = notify.telegram_content("plain", profile={"name": "Alex"}, analysis=a)
     assert len(classic) < 4096 and "…" in rich
     assert len(a["text"]) == 10000
+
+
+def test_graphic_card_uses_geopieno_palette_and_safe_text(measurement):
+    fonts = {"manrope": Path("Manrope.woff"), "sora": Path("Sora.woff")}
+    profile = {"name": 'Alex </text><image href="https://bad.local"/>', "height_cm": 178, "birth": "1990-01-01"}
+    source = telegram_card.svg(measurement, profile, lang="it", fonts=fonts)
+    root = ET.fromstring(source)
+    assert root.attrib["width"] == "960" and int(root.attrib["height"]) < 3500
+    assert "#0f7a63" in source and "#ed6a3b" in source and "#fbf6ef" in source
+    assert "Manrope.woff" in source and "Sora.woff" in source
+    assert "&lt;/text&gt;" in source and not root.findall(".//{http://www.w3.org/2000/svg}image")
+    assert "80,00" in source and "Grasso corporeo" in source and "500 ohm" in source
+
+
+def test_graphic_card_handles_missing_metrics_and_analysis(measurement):
+    fonts = {"manrope": Path("Manrope.woff"), "sora": Path("Sora.woff")}
+    measurement["metrics"] = {}
+    measurement["impedance"] = None
+    source = telegram_card.svg(measurement, {"name": "Alex"}, fonts=fonts, lang="it")
+    assert "Nessuna impedenza" in source and "Imposta altezza" in source
+    a = {"week_start": "2026-10-04", "week_end": "2026-10-10", "lang": "it",
+         "text": "Cosa è migliorato\nPeso & muscoli <test>", "model": "test-model"}
+    source = telegram_card.svg(profile={"name": "Alex"}, analysis=a, fonts=fonts)
+    ET.fromstring(source)
+    assert "ANALISI SETTIMANALE" in source and "class=\"section\"" in source
+    assert "&amp;" in source and "&lt;test&gt;" in source
+
+
+def test_font_cache_downloads_only_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(telegram_card, "FONT_DIR", tmp_path / "fonts")
+    calls = []
+    font = b"wOFF" + b"\0" * 4 + (120).to_bytes(4, "big") + b"\0" * 4 + (1000).to_bytes(4, "big") + b"\0" * 100
+
+    def open_url(url, **kwargs):
+        calls.append(url)
+        return BytesIO(font)
+
+    monkeypatch.setattr(telegram_card.urllib.request, "urlopen", open_url)
+    paths = telegram_card.prepare_fonts()
+    assert all(path.read_bytes() == font for path in paths.values())
+    assert telegram_card.prepare_fonts() == paths and len(calls) == 2
+
+
+def test_font_cache_rejects_non_fonts(tmp_path, monkeypatch):
+    monkeypatch.setattr(telegram_card, "FONT_DIR", tmp_path / "fonts")
+    monkeypatch.setattr(telegram_card.urllib.request, "urlopen", lambda *a, **k: BytesIO(b"<html>error</html>"))
+    with pytest.raises(ValueError, match="Invalid card font"):
+        telegram_card.prepare_fonts()
+    assert not list((tmp_path / "fonts").glob("*.woff"))
+
+
+def test_renderer_is_bounded_and_does_not_inherit_tokens(monkeypatch):
+    monkeypatch.setattr(telegram_card.shutil, "which", lambda *_: "/usr/bin/convert")
+    monkeypatch.setattr(telegram_card, "svg", lambda **kwargs: "<svg/>")
+    monkeypatch.setenv("MISCALE_TELEGRAM_TOKEN", "private-test-token")
+    calls = []
+    image = telegram_card.PNG + b"test"
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, image, b"")
+
+    monkeypatch.setattr(telegram_card.subprocess, "run", run)
+    assert telegram_card.render() == image
+    assert calls[0][1]["timeout"] == 20 and "MSVG:-" in calls[0][0]
+    assert "MISCALE_TELEGRAM_TOKEN" not in calls[0][1]["env"]
+
+
+def test_photo_mode_sends_final_photo_but_keeps_text_drafts(telegram_calls, monkeypatch, measurement):
+    monkeypatch.setattr(notify, "TELEGRAM_FORMAT", "photo")
+    monkeypatch.setattr(telegram_card, "render", lambda **kwargs: telegram_card.PNG + b"example")
+    profile = {"name": "Alex", "height_cm": 178, "birth": "1990-01-01"}
+    assert asyncio.run(notify.telegram("Final", measurement=measurement, profile=profile))
+    assert telegram_calls[0][0] == "sendPhoto" and isinstance(telegram_calls[0][1]["photo"], bytes)
+    assert "reply_markup" in telegram_calls[0][1]
+    assert asyncio.run(notify.telegram("Pending", draft_id=17, measurement=measurement, profile=profile, pending=True))
+    assert telegram_calls[-1][0] == "sendRichMessageDraft" and "photo" not in telegram_calls[-1][1]
+
+
+def test_photo_renderer_failure_falls_back_to_text(telegram_calls, monkeypatch, measurement, caplog):
+    monkeypatch.setattr(notify, "TELEGRAM_FORMAT", "photo")
+
+    def render(**kwargs):
+        raise OSError("private-test-token")
+
+    monkeypatch.setattr(telegram_card, "render", render)
+    assert asyncio.run(notify.telegram("Final", measurement=measurement, profile={"name": "Alex"}))
+    assert telegram_calls[0][0] == "sendRichMessage"
+    assert "private-test-token" not in caplog.text
+
+
+def test_photo_rejection_falls_back_without_duplicate(telegram_calls, monkeypatch, measurement):
+    monkeypatch.setattr(notify, "TELEGRAM_FORMAT", "photo")
+    monkeypatch.setattr(telegram_card, "render", lambda **kwargs: telegram_card.PNG + b"example")
+    original = notify._post
+
+    def post(url, payload):
+        if url.endswith("sendPhoto"):
+            telegram_calls.append(("sendPhoto", payload))
+            return b'{"ok": false, "error_code": 400}'
+        return original(url, payload)
+
+    monkeypatch.setattr(notify, "_post", post)
+    assert asyncio.run(notify.telegram("Final", measurement=measurement, profile={"name": "Alex"}))
+    assert [method for method, _ in telegram_calls] == ["sendPhoto", "sendRichMessage"]
+
+
+def test_photo_upload_uses_multipart_without_external_request(monkeypatch):
+    requests = []
+
+    def open_url(request, **kwargs):
+        requests.append(request)
+        return BytesIO(b'{"ok": true}')
+
+    monkeypatch.setattr(notify.urllib.request, "urlopen", open_url)
+    image = telegram_card.PNG + b"image"
+    response = notify._post("https://example.local/sendPhoto", {"chat_id": 123, "photo": image,
+                            "caption": "Test", "reply_markup": {"inline_keyboard": []}})
+    assert json.loads(response)["ok"]
+    request = requests[0]
+    assert request.get_header("Content-type").startswith("multipart/form-data; boundary=")
+    assert image in request.data and b'filename="card.png"' in request.data
+    assert b'"inline_keyboard": []' in request.data

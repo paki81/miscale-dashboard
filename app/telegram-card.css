@@ -1,0 +1,21 @@
+text { font-family: "@manrope@"; font-weight: 500; fill: #15202d; }
+.canvas { fill: #fbf6ef; }
+.shadow { fill: #15202d; opacity: 0.06; }
+.surface { fill: #ffffff; stroke: #e2e6e4; stroke-width: 1; }
+.hero { fill: #eef6f1; }
+.accent { fill: #ed6a3b; }
+.rule { stroke: #e2e6e4; stroke-width: 1; }
+.brand { font-family: "@sora@"; font-size: 28px; fill: #0f7a63; }
+.eyebrow { font-size: 22px; fill: #667788; letter-spacing: 2px; }
+.title { font-family: "@sora@"; font-size: 42px; }
+.date { font-size: 26px; fill: #667788; }
+.weight { font-family: "@sora@"; font-size: 96px; fill: #0f7a63; }
+.unit { font-family: "@sora@"; font-size: 32px; fill: #0f7a63; }
+.trend { font-size: 26px; fill: #4b5d6d; }
+.metric { fill: #f7faf8; stroke: #e4ece7; stroke-width: 1; }
+.metric-label { font-size: 26px; fill: #667788; }
+.metric-value { font-family: "@sora@"; font-size: 44px; }
+.section { font-family: "@sora@"; font-size: 32px; fill: #0f7a63; }
+.body { font-size: 30px; }
+.note { font-size: 26px; fill: #667788; }
+.footer { font-size: 22px; fill: #667788; }
