@@ -77,10 +77,11 @@ and aren't supported yet. If you have one, a pull request is welcome; see
 
 ### 2. A computer with Bluetooth Low Energy, near the scale
 
-This is a hard requirement. The server **must have a BLE-capable Bluetooth adapter** and be
+With the built-in scanner, the server **must have a BLE-capable Bluetooth adapter** and be
 within Bluetooth range of the scale, usually the same room or the one next to it. The scale
 doesn't pair or connect to anything: it only broadcasts while someone is standing on it, and
-the server has to hear those broadcasts directly.
+the scanner has to hear those broadcasts directly. Alternatively, an
+[ESP32 remote scanner](docs/esphome-remote-scanner.md) can forward them to a server without Bluetooth.
 
 Hardware known to work, or that should work:
 
@@ -156,6 +157,17 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
+## Scanner remoto (ESP32/ESPHome)
+
+Keep the server on a NAS, VM or Proxmox LXC without Bluetooth, and place an ESP32 running
+ESPHome near the scale. It forwards the 13 bytes of `0x181B` service data over Wi-Fi to
+`POST /api/ingest`, using the same parsing, MAC filter, deduplication, profiles and WebSocket
+pipeline as the built-in scanner. Set `MISCALE_SCANNER=off` and protect the endpoint with
+`MISCALE_INGEST_TOKEN`.
+
+See [Remote scanner with an ESP32 (ESPHome)](docs/esphome-remote-scanner.md) for server setup,
+the request format and an ESPHome configuration example.
+
 ## Install it on your phone
 
 The dashboard is a Progressive Web App: it installs like an app, opens full screen with its
@@ -192,7 +204,8 @@ unit, the language and the tolerance for recognizing people are changed in the w
 | `MISCALE_AI_ENABLED` | empty | `true` turns the analysis on without a key (local Ollama) |
 | `MISCALE_AI_WEEKDAY` / `MISCALE_AI_HOUR` | `5` / `9` | When the weekly analysis runs (0 = Monday; default Saturday 9:00) |
 | `MISCALE_AI_LANG` | `MISCALE_LANG` | Language of the analysis: `en` or `pt-BR` |
-| `MISCALE_SCANNER` | `on` | `off` disables Bluetooth (development and demos) |
+| `MISCALE_SCANNER` | `on` | `off` disables Bluetooth (remote scanners, development and demos) |
+| `MISCALE_INGEST_TOKEN` | empty | If set, `/api/ingest` requires the `X-Ingest-Token` header; the dashboard has no login |
 | `MISCALE_LOG_LEVEL` | `INFO` | Python log level |
 
 ### Finding your scale's address
