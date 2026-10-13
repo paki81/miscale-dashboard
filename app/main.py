@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import analysis, notify
 from .db import DB
-from .scale import Reading, ScaleListener
+from .scale import BODY_COMPOSITION, Reading, ScaleListener
 from .session import DEFAULT_TOLERANCE_KG, Session, guess_profile, metrics_for
 
 logging.basicConfig(level=os.environ.get("MISCALE_LOG_LEVEL", "INFO"),
@@ -380,6 +380,29 @@ class SettingsPatch(BaseModel):
 def put_settings(patch: SettingsPatch):
     db.set_settings(patch.model_dump(exclude_none=True))
     return public_settings()
+
+
+INGEST_TOKEN = os.environ.get("MISCALE_INGEST_TOKEN", "")
+
+
+class IngestPacket(BaseModel):
+    data: str = Field(min_length=26, max_length=26, description="13 bytes of service data, hex")
+    mac: str = Field(default="remote", max_length=32)
+    rssi: int | None = None
+
+
+@app.post("/api/ingest")
+async def ingest(packet: IngestPacket, request: Request):
+    if INGEST_TOKEN and request.headers.get("x-ingest-token") != INGEST_TOKEN:
+        raise HTTPException(401, "bad token")
+    try:
+        raw = bytes.fromhex(packet.data)
+    except ValueError as exc:
+        raise HTTPException(422, "data is not valid hex") from exc
+    if len(raw) != 13:
+        raise HTTPException(422, "data must contain 13 bytes")
+    listener.handle(packet.mac, "MIBFS", packet.rssi, {BODY_COMPOSITION: raw})
+    return {"ok": True}
 
 
 # ---------- Debugging ----------
