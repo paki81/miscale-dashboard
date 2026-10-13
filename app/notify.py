@@ -58,7 +58,7 @@ TEXT = {
         "analysis": "🧠 Análise da semana · {name} ({start} a {end})", "day": "%d/%m",
     },
     "it": {
-        "unknown": "Pesata di {w} senza proprietario: il peso non corrisponde a nessun profilo.\n"
+        "unknown": "Rilevazione di {w} senza proprietario: il peso non corrisponde a nessun profilo.\n"
                    "Scegli la persona nella cronologia.",
         "since": "{d} rispetto al {when}", "avg": "media di 7 giorni {w}",
         "fat": "Grasso corporeo {fat}% ({mass}) · Muscoli {muscle}",
@@ -171,7 +171,7 @@ TELEGRAM_TEXT = {
         "sections": ("O que melhorou", "O que pede atenção", "Para a próxima semana"),
     },
     "it": {
-        "measurement": "Pesata", "pending": "Peso stabile · composizione corporea in corso…",
+        "measurement": "Rilevazione", "pending": "Peso stabile · composizione corporea in corso…",
         "details": "Dettagli della misurazione", "dashboard": "Apri dashboard",
         "composition": "Composizione corporea", "thinking": "Scrittura in corso…",
         "labels": ("Grasso corporeo", "Muscoli", "Acqua", "IMC", "Proteine", "Massa ossea", "Massa grassa",

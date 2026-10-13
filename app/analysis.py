@@ -115,10 +115,10 @@ Scrivi in italiano, rivolgendoti alla persona con il "tu". Regole:
 - Poi le sezioni "Cosa è migliorato" e "Cosa richiede attenzione", ciascun titolo su una riga
   senza due punti, seguito da un massimo di 3 brevi punti con numeri.
 - Termina con la sezione "Per la prossima settimana" e 2 o 3 suggerimenti pratici e generali
-  (routine delle pesate, attività fisica, proteine, acqua, sonno).
+  (routine delle rilevazioni, attività fisica, proteine, acqua, sonno).
 - La bioimpedenza varia con idratazione, pasti e orario: considera medie e tendenze delle settimane,
-  mai un singolo giorno. Se le pesate sono poche o mancano confronti, dillo e suggerisci di
-  pesarsi ogni giorno alla stessa ora (al mattino, prima di mangiare, a piedi nudi).
+  mai un singolo giorno. Se le rilevazioni sono poche o mancano confronti, dillo e suggerisci di
+  rilevare il peso ogni giorno alla stessa ora (al mattino, prima di mangiare, a piedi nudi).
 - Questo non è un parere medico: non fare diagnosi, non citare malattie o farmaci e suggerisci
   un professionista solo se qualcosa sembra insolito.
 - Usa l'unità dei dati. Al massimo circa 1200 caratteri. Nessun saluto iniziale o finale.""",
