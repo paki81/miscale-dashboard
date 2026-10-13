@@ -68,7 +68,7 @@ TEXT = {
         "no_impedance": "Nessuna impedenza (sali a piedi nudi e attendi la fine della misurazione).",
         "no_height": "Imposta altezza e data di nascita nel profilo per vedere la composizione corporea.",
         "date": "%d/%m %H:%M",
-        "analysis": "Analisi settimanale · {name} ({start} – {end})", "day": "%d/%m",
+        "analysis": "🧠 Analisi settimanale · {name} ({start} – {end})", "day": "%d/%m",
     },
 }
 
@@ -150,18 +150,22 @@ def analysis_message(a: dict, profile: dict, lang: str = LANG) -> str:
 METRIC_FIELDS = (("body_fat", "%", 1), ("muscle_mass", "mass", 1), ("water", "%", 1), ("bmi", "", 1),
                  ("protein", "%", 1), ("bone_mass", "mass", 1), ("fat_mass", "mass", 1),
                  ("visceral_fat", "", 0), ("bmr", " kcal", 0))
-
+METRIC_EMOJI = {"body_fat": "🔥", "muscle_mass": "💪", "water": "💧", "bmi": "📊", "protein": "🥩",
+                "bone_mass": "🦴", "fat_mass": "🧈", "visceral_fat": "❤️", "bmr": "🔋"}
+SECTION_EMOJI = ("✅ ", "⚠️ ", "🎯 ")
 
 TELEGRAM_TEXT = {
     "en": {
         "measurement": "Weigh-in", "pending": "Stable weight · measuring body composition…",
         "details": "Measurement details", "dashboard": "Open dashboard",
+        "composition": "Body composition", "thinking": "Writing…",
         "labels": ("Body fat", "Muscle", "Water", "BMI", "Protein", "Bone mass", "Fat mass", "Visceral fat", "BMR"),
         "sections": ("What improved", "What needs attention", "For next week"),
     },
     "pt-BR": {
         "measurement": "Pesagem", "pending": "Peso estável · medindo a composição corporal…",
         "details": "Detalhes da medição", "dashboard": "Abrir painel",
+        "composition": "Composição corporal", "thinking": "Escrevendo…",
         "labels": ("Gordura", "Músculo", "Água", "IMC", "Proteína", "Ossos", "Massa gorda",
                    "Gordura visceral", "Metabolismo basal"),
         "sections": ("O que melhorou", "O que pede atenção", "Para a próxima semana"),
@@ -169,11 +173,21 @@ TELEGRAM_TEXT = {
     "it": {
         "measurement": "Pesata", "pending": "Peso stabile · composizione corporea in corso…",
         "details": "Dettagli della misurazione", "dashboard": "Apri dashboard",
+        "composition": "Composizione corporea", "thinking": "Scrittura in corso…",
         "labels": ("Grasso corporeo", "Muscoli", "Acqua", "IMC", "Proteine", "Massa ossea", "Massa grassa",
                    "Grasso viscerale", "Metabolismo basale"),
         "sections": ("Cosa è migliorato", "Cosa richiede attenzione", "Per la prossima settimana"),
     },
 }
+
+
+def _dashboard_button(labels: dict) -> str:
+    """A native button inside the rich card; the classic fallback uses reply_markup instead."""
+    url = urllib.parse.urlsplit(PUBLIC_URL)
+    if url.scheme not in ("http", "https") or not url.netloc:
+        return ""
+    return ('<tg-button-row><tg-button type="url" style="success" '
+            f'url="{escape(PUBLIC_URL, quote=True)}">{escape(labels["dashboard"])}</tg-button></tg-button-row>')
 
 
 def telegram_content(text: str, measurement: dict | None = None, profile: dict | None = None,
@@ -195,15 +209,24 @@ def telegram_content(text: str, measurement: dict | None = None, profile: dict |
         classic.append(safe)
 
     if measurement and profile:
-        heading(f"{labels['measurement']} · {profile['name']}")
+        heading(f"⚖️ {labels['measurement']} · {profile['name']}")
         weight = escape(_mass(measurement["weight_kg"], unit, 2, lang))
-        rich.append(f"<p><strong>{weight}</strong></p>")
+        rich.append(f"<h1>{weight}</h1>")
         classic.append(f"<b>{weight}</b>")
-        paragraph(datetime.fromisoformat(measurement["measured_at"]).strftime("%d/%m/%Y %H:%M"))
-        for trend in _trend(measurement, history or [], unit, lang):
-            paragraph(trend)
+        when = datetime.fromisoformat(measurement["measured_at"])
+        shown = escape(when.strftime("%d/%m/%Y %H:%M"))
+        rich.append(f'<p><tg-time unix="{int(when.timestamp())}" format="wDT">{shown}</tg-time></p>')
+        classic.append(shown)
+        trends = _trend(measurement, history or [], unit, lang)
+        if trends:
+            styled = [("↘️ " if line.startswith("−") else "↗️ " if line.startswith("+") else "") + escape(line)
+                      for line in trends]
+            rich.append("<blockquote>" + "<br>".join(styled) + "</blockquote>")
+            classic += [escape(line) for line in trends]
         if pending:
-            paragraph(labels["pending"])
+            # Drafts only: <tg-thinking> animates while the scale finishes the measurement.
+            rich.append(f"<tg-thinking>{escape(labels['pending'])}</tg-thinking>")
+            classic.append(escape(labels["pending"]))
         else:
             rows, details = [], []
             metrics = measurement.get("metrics") or {}
@@ -212,24 +235,32 @@ def telegram_content(text: str, measurement: dict | None = None, profile: dict |
                 if value is None:
                     continue
                 value = _mass(value, unit, decimals, lang) if suffix == "mass" else _num(value, decimals, lang) + suffix
-                safe_label, safe_value = escape(label), escape(value)
+                safe_label = f"{METRIC_EMOJI[field]} {escape(label)}"
+                safe_value = escape(value)
                 classic.append(f"<b>{safe_label}</b>  {safe_value}")
                 if index < 4:
-                    rows.append(f"<tr><td>{safe_label}</td><td>{safe_value}</td></tr>")
+                    rows.append(f"<tr><td>{safe_label}</td><td align=\"right\">{safe_value}</td></tr>")
                 else:
-                    details.append(f"<p><b>{safe_label}</b> {safe_value}</p>")
+                    details.append(f"<li>{safe_label} — <b>{safe_value}</b></li>")
             if rows:
-                rich.append("<table striped compact>" + "".join(rows) + "</table>")
+                caption = escape(labels["composition"])
+                rich.append(f'<table striped compact><caption>{caption}</caption>' + "".join(rows) + "</table>")
+            footer = []
             if measurement.get("impedance"):
                 value = t["impedance"].format(imp=measurement["impedance"])
-                details.append(f"<p>{escape(value)}</p>")
-                classic.append(escape(value))
+                footer.append("⚡ " + escape(value))
+                classic.append("⚡ " + escape(value))
             else:
-                paragraph(t["no_impedance"])
+                footer.append(escape(t["no_impedance"]))
+                classic.append(escape(t["no_impedance"]))
             if not profile.get("height_cm") or not profile.get("birth"):
-                paragraph(t["no_height"])
+                footer.append(escape(t["no_height"]))
+                classic.append(escape(t["no_height"]))
+            rich.append("<footer>" + " · ".join(footer) + "</footer>")
             if details:
-                rich.append(f"<details><summary>{escape(labels['details'])}</summary>{''.join(details)}</details>")
+                rich.append(f"<details><summary>{escape(labels['details'])}</summary><ul>"
+                            + "".join(details) + "</ul></details>")
+        rich.append(_dashboard_button(labels))
     elif analysis and profile:
         start, end = (datetime.fromisoformat(analysis[k]).strftime(t["day"]) for k in ("week_start", "week_end"))
         heading(t["analysis"].format(name=profile["name"], start=start, end=end))
@@ -237,15 +268,21 @@ def telegram_content(text: str, measurement: dict | None = None, profile: dict |
         if len(body) > 2400:
             body = body[:2400] + "…"
         for line in body.splitlines():
-            if line.strip() in labels["sections"]:
-                heading(line.strip(), 3)
-            elif line.strip():
+            stripped = line.strip()
+            if stripped in labels["sections"]:
+                icon = SECTION_EMOJI[labels["sections"].index(stripped)]
+                heading(icon + stripped, 3)
+            elif stripped:
                 paragraph(line)
+        if pending:
+            rich.append(f"<tg-thinking>{escape(labels['thinking'])}</tg-thinking>")
         if analysis.get("model"):
-            rich.append(f"<footer>{escape(analysis['model'])}</footer>")
+            rich.append(f"<footer>🧠 {escape(analysis['model'])}</footer>")
             classic.append(f"<i>{escape(analysis['model'])}</i>")
+        rich.append(_dashboard_button(labels))
     else:
         paragraph(text[:3500])
+        rich.append(_dashboard_button(labels))
     return "".join(rich), "\n\n".join(classic)
 
 
@@ -313,6 +350,7 @@ async def telegram(text: str, draft_id: int | None = None, chat_id: str | None =
         await asyncio.sleep(delay)
     rich, classic = telegram_content(text, **content)
     base = {"chat_id": int(chat) if chat.isdecimal() else chat}
+    markup = {}
     if draft_id is not None:
         base["draft_id"] = draft_id
     else:
@@ -320,7 +358,7 @@ async def telegram(text: str, draft_id: int | None = None, chat_id: str | None =
         if url.scheme in ("http", "https") and url.netloc:
             lang = content.get("lang") or (content.get("analysis") or {}).get("lang") or LANG
             label = TELEGRAM_TEXT.get(lang, TELEGRAM_TEXT["en"])["dashboard"]
-            base["reply_markup"] = {"inline_keyboard": [[{"text": label, "url": PUBLIC_URL}]]}
+            markup = {"reply_markup": {"inline_keyboard": [[{"text": label, "url": PUBLIC_URL}]]}}
     methods = []
     if TELEGRAM_FORMAT == "photo" and draft_id is None and content.get("profile") and (
             content.get("measurement") or content.get("analysis")):
@@ -330,14 +368,15 @@ async def telegram(text: str, draft_id: int | None = None, chat_id: str | None =
             image_content = {k: v for k, v in content.items() if k != "pending"}
             image = await asyncio.to_thread(render, **image_content)
             caption = text if len(text) <= 900 else text[:900] + "…"
-            methods.append(("sendPhoto", {**base, "photo": image, "caption": escape(caption), "parse_mode": "HTML"}))
+            methods.append(("sendPhoto", {**base, **markup, "photo": image,
+                                          "caption": escape(caption), "parse_mode": "HTML"}))
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             log.warning("Telegram card rendering failed (%s); using text", type(exc).__name__)
     if TELEGRAM_FORMAT in ("rich", "photo") and _rich_available:
         methods.append(("sendRichMessageDraft" if draft_id is not None else "sendRichMessage",
                         {**base, "rich_message": {"html": rich}}))
     methods.append(("sendMessageDraft" if draft_id is not None else "sendMessage",
-                    {**base, "text": classic, "parse_mode": "HTML",
+                    {**base, **markup, "text": classic, "parse_mode": "HTML",
                      **({"link_preview_options": {"is_disabled": True}} if draft_id is None else {})}))
     for method, payload in methods:
         try:

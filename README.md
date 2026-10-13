@@ -232,11 +232,15 @@ BMI 25.7 · Visceral fat 15 · BMR 1,649 kcal
 Impedance 478 Ω
 ```
 
-Telegram uses [Rich Messages](https://core.telegram.org/bots/api#sendrichmessage) with the weight
-in bold, a compact summary table, expandable measurement details and an **Open dashboard** button
-when `MISCALE_PUBLIC_URL` is set to an HTTP(S) URL. English, Portuguese and Italian are supported;
-only available metrics are shown. If the rich API is unavailable, the notifier falls back to classic
-HTML. Set `MISCALE_TELEGRAM_FORMAT=html` to choose classic HTML explicitly.
+Telegram uses [Rich Messages](https://core.telegram.org/bots/api#sendrichmessage) styled like a card:
+the weight as a big heading, the date localized by the recipient's client (`tg-time`), the trend in a
+blockquote, a captioned striped table of the main metrics, the rest in expandable details and hints
+in the footer. The **Open dashboard** button is rendered natively inside the card when
+`MISCALE_PUBLIC_URL` is an HTTP(S) URL; the classic fallback keeps it as an inline keyboard.
+Pending weigh-ins and streamed analyses show an animated "thinking" line in private-chat drafts.
+English, Portuguese and Italian are supported; only available metrics are shown. If the rich API is
+unavailable, the notifier falls back to classic HTML. Set `MISCALE_TELEGRAM_FORMAT=html` to choose
+classic HTML explicitly.
 
 Set `MISCALE_TELEGRAM_FORMAT=photo` for final PNG cards styled with CSS: Sora headings, Manrope
 body text, cream backgrounds and the green/orange palette inspired by [Geopieno](https://www.geopieno.it/app/).
