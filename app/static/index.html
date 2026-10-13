@@ -328,6 +328,8 @@ tr.new td { animation: rowIn 2.4s ease; }
   <section class="card" id="anCard">
     <div class="head">
       <h2 id="anTitle" data-t="analysisTitle"></h2>
+      <label id="anSendWrap" style="display:flex; gap:6px; align-items:center; font-weight:normal" hidden>
+        <input type="checkbox" id="anSend" style="width:auto" checked> <span data-t="notifyTelegram"></span></label>
       <button id="anRun" onclick="runAnalysis()" data-t="generateNow" hidden></button>
     </div>
     <div class="analysis empty" id="analysis" aria-live="polite"></div>
@@ -470,6 +472,7 @@ const STRINGS = {
     tolerance: "Tolerance to recognize a person by weight ({unit})",
     tolNote: "A weigh-in goes to the profile whose last weight is closest, within this tolerance. Otherwise it is saved as \"unknown\" and you can assign it in the history.",
     analysisTitle: "Weekly analysis", analysisRange: "{start} – {end}", generateNow: "Generate now", writing: "Writing…",
+    notifyTelegram: "Notify on Telegram",
     analysisEmpty: "No analysis yet. The next one is written on {day} at {hour}, or generate one now.",
     analysisMeta: "Written {when} · {model}",
     analysisOff: "A short weekly summary of your trends, written by an AI model (OpenAI, OpenRouter or a local Ollama). To turn it on, set {var} on the server.",
@@ -515,6 +518,7 @@ const STRINGS = {
     tolerance: "Tolerância para reconhecer a pessoa pelo peso ({unit})",
     tolNote: "A pesagem vai para o perfil com o último peso mais perto, dentro dessa tolerância. Senão fica como \"desconhecido\" e dá para escolher a pessoa no histórico.",
     analysisTitle: "Análise da semana", analysisRange: "{start} a {end}", generateNow: "Gerar agora", writing: "Escrevendo…",
+    notifyTelegram: "Notificar no Telegram",
     analysisEmpty: "Nenhuma análise ainda. A próxima sai {day} às {hour}, ou gere uma agora.",
     analysisMeta: "Escrita em {when} · {model}",
     analysisOff: "Um resumo curto da sua semana, escrito por um modelo de IA (OpenAI, OpenRouter ou um Ollama local). Para ligar, defina {var} no servidor.",
@@ -560,6 +564,7 @@ const STRINGS = {
     tolerance: "Tolleranza per riconoscere una persona dal peso ({unit})",
     tolNote: "La pesata viene assegnata al profilo con il peso più vicino, entro questa tolleranza. Altrimenti viene salvata come \"sconosciuta\" e puoi assegnarla nella cronologia.",
     analysisTitle: "Analisi settimanale", analysisRange: "{start} – {end}", generateNow: "Genera ora", writing: "Scrittura in corso…",
+    notifyTelegram: "Notifica su Telegram",
     analysisEmpty: "Nessuna analisi disponibile. La prossima sarà scritta {day} alle {hour}, oppure generane una ora.",
     analysisMeta: "Scritta {when} · {model}",
     analysisOff: "Un breve riepilogo settimanale delle tue tendenze, scritto da un modello IA (OpenAI, OpenRouter o Ollama locale). Per attivarlo, imposta {var} sul server.",
@@ -812,6 +817,7 @@ async function loadAnalysis(force = false) {
 function renderAnalysis() {
   const box = $("analysis"), btn = $("anRun");
   btn.hidden = !settings.ai_enabled;
+  $("anSendWrap").hidden = !settings.ai_enabled;
   $("anTitle").textContent = t("analysisTitle");
   if (!settings.ai_enabled) {
     box.className = "analysis off";
@@ -905,7 +911,8 @@ async function runAnalysis() {
   if (!pid || typing?.pid === pid) return;
   startTyping(pid);
   let r;
-  try { r = await fetch(`/api/analyses/run?profile_id=${pid}`, { method: "POST" }); } catch (err) { r = null; }
+  const send = $("anSend").checked ? "&send=true" : "";
+  try { r = await fetch(`/api/analyses/run?profile_id=${pid}${send}`, { method: "POST" }); } catch (err) { r = null; }
   if (r?.ok) return endTyping(await r.json());
   const detail = r ? (await r.json().catch(() => ({}))).detail : "network";
   const note = r?.status === 409 ? t(String(detail).includes("already") ? "analysisBusy" : "analysisNoData")
