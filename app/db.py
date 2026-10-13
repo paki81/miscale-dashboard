@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS profiles (
     male INTEGER NOT NULL DEFAULT 1,
     ref_weight REAL,
     color TEXT,
-    photo TEXT
+    photo TEXT,
+    telegram_chat_id TEXT,
+    notify INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -57,7 +59,7 @@ CREATE TABLE IF NOT EXISTS packets (
 );
 """
 
-PROFILE_FIELDS = ("name", "height_cm", "birth", "male", "ref_weight", "color")
+PROFILE_FIELDS = ("name", "height_cm", "birth", "male", "ref_weight", "color", "telegram_chat_id", "notify")
 
 
 class DB:
@@ -67,19 +69,26 @@ class DB:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(profiles)")}
+        if "telegram_chat_id" not in cols:
+            self.conn.execute("ALTER TABLE profiles ADD COLUMN telegram_chat_id TEXT")
+        if "notify" not in cols:
+            self.conn.execute("ALTER TABLE profiles ADD COLUMN notify INTEGER NOT NULL DEFAULT 1")
         self.conn.commit()
 
     # ---------- Profiles ----------
     def profiles(self) -> list[dict]:
-        return [dict(r, male=bool(r["male"])) for r in self.conn.execute("SELECT * FROM profiles ORDER BY id")]
+        return [dict(r, male=bool(r["male"]), notify=bool(r["notify"]))
+                for r in self.conn.execute("SELECT * FROM profiles ORDER BY id")]
 
     def profile(self, pid: int) -> dict | None:
         row = self.conn.execute("SELECT * FROM profiles WHERE id = ?", (pid,)).fetchone()
-        return dict(row, male=bool(row["male"])) if row else None
+        return dict(row, male=bool(row["male"]), notify=bool(row["notify"])) if row else None
 
     def save_profile(self, p: dict) -> int:
         fields = {k: p.get(k) for k in PROFILE_FIELDS}
         fields["male"] = int(bool(fields["male"]))
+        fields["notify"] = int(bool(fields["notify"])) if fields["notify"] is not None else 1
         if p.get("id"):
             cols = ", ".join(f"{k} = ?" for k in fields)
             self.conn.execute(f"UPDATE profiles SET {cols} WHERE id = ?", (*fields.values(), p["id"]))

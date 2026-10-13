@@ -74,7 +74,8 @@ TEXT = {
 
 
 def enabled() -> bool:
-    return bool(WEBHOOK or (TELEGRAM_TOKEN and TELEGRAM_CHAT))
+    # A bot token alone is enough: a profile can carry its own chat_id.
+    return bool(WEBHOOK or TELEGRAM_TOKEN)
 
 
 def _num(v, d=1, lang=LANG):
@@ -248,12 +249,13 @@ def telegram_content(text: str, measurement: dict | None = None, profile: dict |
     return "".join(rich), "\n\n".join(classic)
 
 
-def telegram_enabled() -> bool:
-    return bool(TELEGRAM_TOKEN and TELEGRAM_CHAT)
+def telegram_enabled(chat_id: str | None = None) -> bool:
+    return bool(TELEGRAM_TOKEN and (chat_id or TELEGRAM_CHAT))
 
 
-def _private_chat() -> bool:
-    return TELEGRAM_CHAT.isdecimal() and int(TELEGRAM_CHAT) > 0
+def _private_chat(chat: str | None = None) -> bool:
+    chat = chat or TELEGRAM_CHAT
+    return chat.isdecimal() and int(chat) > 0
 
 
 class TelegramError(Exception):
@@ -299,9 +301,10 @@ def _telegram_call(method: str, payload: dict):
         raise TelegramError(int(result.get("error_code", 500)), int((result.get("parameters") or {}).get("retry_after", 0)))
 
 
-async def telegram(text: str, draft_id: int | None = None, **content) -> bool:
+async def telegram(text: str, draft_id: int | None = None, chat_id: str | None = None, **content) -> bool:
     global _rich_available, _telegram_after
-    if not telegram_enabled() or (draft_id is not None and not _private_chat()):
+    chat = chat_id or TELEGRAM_CHAT
+    if not telegram_enabled(chat) or (draft_id is not None and not _private_chat(chat)):
         return False
     delay = max(0, _telegram_after - time.monotonic())
     if delay:
@@ -309,7 +312,7 @@ async def telegram(text: str, draft_id: int | None = None, **content) -> bool:
             return False
         await asyncio.sleep(delay)
     rich, classic = telegram_content(text, **content)
-    base = {"chat_id": int(TELEGRAM_CHAT) if _private_chat() else TELEGRAM_CHAT}
+    base = {"chat_id": int(chat) if chat.isdecimal() else chat}
     if draft_id is not None:
         base["draft_id"] = draft_id
     else:
@@ -357,7 +360,8 @@ async def telegram(text: str, draft_id: int | None = None, **content) -> bool:
 
 
 class TelegramLive:
-    def __init__(self):
+    def __init__(self, chat_id: str | None = None):
+        self.chat_id = chat_id
         self.draft_id = secrets.randbits(52) + 1
         self.changed = asyncio.Event()
         self.pending: tuple[str, dict] | None = None
@@ -365,7 +369,8 @@ class TelegramLive:
         self.closed = False
 
     def update(self, text: str, **content):
-        if self.closed or not TELEGRAM_LIVE or not telegram_enabled() or not _private_chat():
+        if (self.closed or not TELEGRAM_LIVE or not telegram_enabled(self.chat_id)
+                or not _private_chat(self.chat_id)):
             return
         self.pending = (text, content)
         self.changed.set()
@@ -386,7 +391,7 @@ class TelegramLive:
                 return
             self.changed.clear()
             text, content = self.pending
-            if not await telegram(text, draft_id=self.draft_id, **content):
+            if not await telegram(text, draft_id=self.draft_id, chat_id=self.chat_id, **content):
                 return
             next_update = time.monotonic() + DRAFT_INTERVAL
 
@@ -398,7 +403,8 @@ class TelegramLive:
 
 
 async def send(text: str, measurement: dict | None = None, profile: dict | None = None,
-               analysis: dict | None = None, unit: str = "kg", history: list[dict] | None = None) -> bool:
+               analysis: dict | None = None, unit: str = "kg", history: list[dict] | None = None,
+               chat_id: str | None = None) -> bool:
     """Sends `text`. The webhook also gets the measurement, or the weekly analysis."""
     if not enabled():
         log.info("no notifier configured; message only logged:\n%s", text)
@@ -416,7 +422,7 @@ async def send(text: str, measurement: dict | None = None, profile: dict | None 
         except OSError as exc:
             log.warning("webhook failed (%s)", getattr(exc, "code", type(exc).__name__))
             ok = False
-    if telegram_enabled():
+    if telegram_enabled(chat_id):
         ok = await telegram(text, measurement=measurement, profile=profile, analysis=analysis,
-                            unit=unit, history=history) and ok
+                            unit=unit, history=history, chat_id=chat_id) and ok
     return ok

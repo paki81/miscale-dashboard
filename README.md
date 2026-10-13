@@ -267,6 +267,13 @@ cooldown is respected, and ambiguous network failures are not retried to avoid d
 Very long analysis text is shortened in Telegram; the full text stays in the dashboard. The button
 must point to an address reachable by the recipient: a LAN URL works only from that network or VPN.
 
+Each profile can override the destination: set a **Telegram chat ID** in the profile dialog and the
+bot writes that person's weigh-ins and notified analyses to their own chat instead of the default
+`MISCALE_TELEGRAM_CHAT_ID`. With a chat ID per profile, the default chat is optional. Turn off
+**Notify** on a profile to silence that person's notifications entirely; the webhook keeps firing
+so automations (n8n, Home Assistant...) still see every weigh-in. The dashboard has no login:
+anyone on your network can edit profiles, so keep bot tokens and API keys in the environment only.
+
 The webhook still receives the original plain text plus the raw data, so you can use it from n8n, Node-RED,
 Home Assistant (`/api/webhook/<id>`) or anything else that accepts JSON:
 

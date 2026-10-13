@@ -143,6 +143,9 @@ def test_notifications_send_without_delaying_complete_measurements(ingest_client
     calls, done = [], asyncio.Event()
 
     class Live:
+        def __init__(self, *args, **kwargs):
+            pass
+
         def update(self, text, **kwargs):
             calls.append(("draft", kwargs["measurement"]["impedance"]))
 
@@ -176,6 +179,9 @@ def test_impedance_update_completes_same_live_notification(ingest_client, monkey
     final = []
 
     class Live:
+        def __init__(self, *args, **kwargs):
+            pass
+
         def update(self, *args, **kwargs):
             started.set()
 
@@ -210,6 +216,9 @@ def test_unrecognized_weigh_in_is_not_notified(ingest_client, monkeypatch):
     calls = []
 
     class Live:
+        def __init__(self, *args, **kwargs):
+            pass
+
         def update(self, *args, **kwargs):
             calls.append("draft")
 
@@ -225,6 +234,91 @@ def test_unrecognized_weigh_in_is_not_notified(ingest_client, monkeypatch):
     assert c.post("/api/ingest", json={"data": packet(80, stabilized=True).hex()}).status_code == 200
     c.portal.call(asyncio.sleep, 0)
     assert len(main.db.list()) == 1 and main.db.list()[0]["profile_id"] is None
+    assert calls == [] and main.waiting == {}
+
+
+def test_profile_notification_fields(tmp_path):
+    c, main = client(tmp_path)
+    with c:
+        p = c.post("/api/profiles", json={"name": "Alex", "telegram_chat_id": "456", "notify": False}).json()
+        assert p["telegram_chat_id"] == "456" and p["notify"] is False
+        p = c.put(f"/api/profiles/{p['id']}", json={"name": "Alex", "notify": True}).json()
+        assert p["notify"] is True and p["telegram_chat_id"] is None
+
+
+def test_db_migrates_profiles_without_notification_columns(tmp_path):
+    import sqlite3
+
+    from app.db import DB
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE profiles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, "
+                 "male INTEGER NOT NULL DEFAULT 1)")
+    conn.execute("INSERT INTO profiles (name) VALUES ('Alex')")
+    conn.commit()
+    conn.close()
+    db = DB(str(path))
+    p = db.profile(1)
+    assert p["name"] == "Alex" and p["notify"] is True and p["telegram_chat_id"] is None
+
+
+def test_notification_goes_to_profile_chat(ingest_client, monkeypatch):
+    c, main = ingest_client
+    done = asyncio.Event()
+    calls = []
+
+    class Live:
+        def __init__(self, chat_id=None):
+            calls.append(("live", chat_id))
+
+        def update(self, *args, **kwargs):
+            pass
+
+        async def close(self):
+            pass
+
+    async def send(text, measurement=None, profile=None, **kwargs):
+        calls.append(("final", kwargs.get("chat_id")))
+        done.set()
+        return True
+
+    async def wait():
+        await asyncio.wait_for(done.wait(), 1)
+
+    monkeypatch.setattr(main.notify, "enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "TelegramLive", Live)
+    monkeypatch.setattr(main.notify, "send", send)
+    c.post("/api/profiles", json={"name": "Alex", "telegram_chat_id": "456"})
+    data = {"data": packet(80, impedance=500, stabilized=True).hex()}
+    assert c.post("/api/ingest", json=data).status_code == 200
+    c.portal.call(wait)
+    assert ("live", "456") in calls and ("final", "456") in calls
+
+
+def test_notifications_off_for_profile(ingest_client, monkeypatch):
+    c, main = ingest_client
+    calls = []
+
+    class Live:
+        def __init__(self, *args, **kwargs):
+            calls.append("live")
+
+        def update(self, *args, **kwargs):
+            calls.append("draft")
+
+        async def close(self):
+            pass
+
+    async def send(*args, **kwargs):
+        calls.append("final")
+
+    monkeypatch.setattr(main.notify, "enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "TelegramLive", Live)
+    monkeypatch.setattr(main.notify, "send", send)
+    c.post("/api/profiles", json={"name": "Alex", "notify": False})
+    data = {"data": packet(80, impedance=500, stabilized=True).hex()}
+    assert c.post("/api/ingest", json=data).status_code == 200
+    c.portal.call(asyncio.sleep, 0.05)
     assert calls == [] and main.waiting == {}
 
 

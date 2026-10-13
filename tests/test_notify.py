@@ -288,6 +288,36 @@ def test_no_dashboard_button_for_invalid_url(telegram_calls, monkeypatch):
     assert "reply_markup" not in telegram_calls[0][1]
 
 
+def test_telegram_routes_to_profile_chat(telegram_calls):
+    assert asyncio.run(notify.telegram("Test", chat_id="456"))
+    assert telegram_calls[0][1]["chat_id"] == 456
+
+
+def test_profile_chat_works_without_a_default_chat(telegram_calls, monkeypatch):
+    monkeypatch.setattr(notify, "TELEGRAM_CHAT", "")
+    assert notify.enabled()   # a profile can still carry its own chat
+    assert not asyncio.run(notify.telegram("Test"))   # no destination: skipped, not an error
+    assert telegram_calls == []
+    assert asyncio.run(notify.telegram("Test", chat_id="456"))
+    assert telegram_calls[0][1]["chat_id"] == 456
+
+
+def test_live_routes_drafts_to_profile_chat(telegram_calls, monkeypatch):
+    monkeypatch.setattr(notify, "DRAFT_INTERVAL", 0.01, raising=False)
+
+    async def run():
+        live = notify.TelegramLive("456")
+        live.update("Draft")
+        for _ in range(50):
+            if telegram_calls:
+                break
+            await asyncio.sleep(0.01)
+        await live.close()
+
+    asyncio.run(run())
+    assert telegram_calls and all(p["chat_id"] == 456 for _, p in telegram_calls)
+
+
 def test_long_analysis_is_shortened_only_for_telegram():
     a = {"week_start": "2026-10-04", "week_end": "2026-10-10", "lang": "it", "text": "Long text " * 1000}
     rich, classic = notify.telegram_content("plain", profile={"name": "Alex"}, analysis=a)

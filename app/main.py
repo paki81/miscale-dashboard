@@ -67,16 +67,21 @@ waiting: dict[int, asyncio.Event] = {}
 
 async def notify_when_ready(mid: int):
     event = waiting.setdefault(mid, asyncio.Event())
-    live = notify.TelegramLive()
-    try:
-        m = db.get(mid)
-        if not m:
-            return
-        profile = db.profile(m["profile_id"]) if m["profile_id"] else None
-        if not profile:
+    m = db.get(mid)
+    profile = db.profile(m["profile_id"]) if m and m["profile_id"] else None
+    if not profile:
+        waiting.pop(mid, None)
+        if m:
             # A weight that matches nobody (an object, a pet, a guest) stays in the history only.
             log.info("measurement %s has no owner (%.2f kg): not notifying", mid, m["weight_kg"])
-            return
+        return
+    if not profile["notify"]:
+        waiting.pop(mid, None)
+        log.info("measurement %s: notifications off for %s", mid, profile["name"])
+        return
+    chat_id = profile.get("telegram_chat_id") or None
+    live = notify.TelegramLive(chat_id)
+    try:
         if not m["impedance"]:
             history = [h for h in db.list(m["profile_id"], limit=50) if h["id"] != mid]
             live.update(notify.message(m, profile, history, settings()["unit"]), measurement=m,
@@ -95,7 +100,8 @@ async def notify_when_ready(mid: int):
         return
     history = [h for h in db.list(m["profile_id"], limit=50) if h["id"] != mid]
     unit = settings()["unit"]
-    await notify.send(notify.message(m, profile, history, unit), m, profile, unit=unit, history=history)
+    await notify.send(notify.message(m, profile, history, unit), m, profile, unit=unit, history=history,
+                      chat_id=chat_id)
 
 
 def on_reading(r: Reading):
@@ -136,14 +142,16 @@ async def run_analysis(profile_id: int, week_end: date, kind: str, send: bool = 
     loop = asyncio.get_running_loop()
     # The model writes in a thread; its pieces go out over the WebSocket in order.
     pieces: asyncio.Queue = asyncio.Queue()
-    live = notify.TelegramLive()
+    send = send and p["notify"]
+    chat_id = p.get("telegram_chat_id") or None
+    live = notify.TelegramLive(chat_id)
 
     async def pump():
         partial = ""
         while (item := await pieces.get()) is not None:
             await hub.send({"type": "analysis_delta", "profile_id": profile_id, "text": item[0], "reset": item[1]})
             partial = item[0] if item[1] else partial + item[0]
-            if send and notify.telegram_enabled():
+            if send and notify.telegram_enabled(chat_id):
                 preview = {"week_start": data["week"]["start"], "week_end": data["week"]["end"],
                            "text": analysis.clean(partial), "lang": analysis.lang()}
                 live.update(notify.analysis_message(preview, p, analysis.lang()), profile=p, analysis=preview)
@@ -170,7 +178,8 @@ async def run_analysis(profile_id: int, week_end: date, kind: str, send: bool = 
     log.info("analysis %s (%s) of %s written by %s", aid, kind, p["name"], model)
     await hub.send({"type": "analysis", "profile_id": profile_id, "analysis": saved})
     if send and notify.enabled():
-        await notify.send(notify.analysis_message(saved, p, analysis.lang()), profile=p, analysis=saved)
+        await notify.send(notify.analysis_message(saved, p, analysis.lang()), profile=p, analysis=saved,
+                          chat_id=chat_id)
     return saved
 
 
@@ -298,6 +307,8 @@ class Profile(BaseModel):
     male: bool = True
     ref_weight: float | None = Field(None, gt=0, lt=300)
     color: str | None = None
+    telegram_chat_id: str | None = Field(None, max_length=64)
+    notify: bool = True
 
 
 def recompute(profile_id: int):

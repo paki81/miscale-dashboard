@@ -250,7 +250,7 @@ def test_weekly_analysis_is_notified(tmp_path, provider, monkeypatch):
     c, main = client(tmp_path)
     sent = []
 
-    async def fake_send(text, measurement=None, profile=None, analysis=None):
+    async def fake_send(text, measurement=None, profile=None, analysis=None, **kwargs):
         sent.append((text, profile["name"], analysis["kind"]))
         return True
 
@@ -271,6 +271,9 @@ def test_analysis_telegram_stream_respects_send_flag(tmp_path, provider, monkeyp
     updates, closed, finals = [], [], []
 
     class Live:
+        def __init__(self, *args, **kwargs):
+            pass
+
         def update(self, text, **kwargs):
             updates.append(kwargs["analysis"]["text"])
 
@@ -283,7 +286,7 @@ def test_analysis_telegram_stream_respects_send_flag(tmp_path, provider, monkeyp
         return True
 
     monkeypatch.setattr(main.notify, "TelegramLive", Live, raising=False)
-    monkeypatch.setattr(main.notify, "telegram_enabled", lambda: True, raising=False)
+    monkeypatch.setattr(main.notify, "telegram_enabled", lambda *a, **k: True, raising=False)
     monkeypatch.setattr(main.notify, "enabled", lambda: True)
     monkeypatch.setattr(main.notify, "send", fake_send)
     with c:
@@ -304,6 +307,9 @@ def test_failed_analysis_closes_live_preview_without_final_notification(tmp_path
     closed, sent = [], []
 
     class Live:
+        def __init__(self, *args, **kwargs):
+            pass
+
         def update(self, *args, **kwargs):
             pass
 
@@ -338,6 +344,9 @@ def test_live_analysis_replaces_failed_provider_partial_text(tmp_path, monkeypat
     updates = []
 
     class Live:
+        def __init__(self, *args, **kwargs):
+            pass
+
         def update(self, text, **kwargs):
             updates.append(kwargs["analysis"]["text"])
 
@@ -348,7 +357,7 @@ def test_live_analysis_replaces_failed_provider_partial_text(tmp_path, monkeypat
         return True
 
     monkeypatch.setattr(main.notify, "TelegramLive", Live)
-    monkeypatch.setattr(main.notify, "telegram_enabled", lambda: True)
+    monkeypatch.setattr(main.notify, "telegram_enabled", lambda *a, **k: True)
     monkeypatch.setattr(main.notify, "enabled", lambda: True)
     monkeypatch.setattr(main.notify, "send", send)
     with c:
