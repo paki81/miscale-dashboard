@@ -98,7 +98,7 @@ def test_rich_analysis_escapes_provider_text():
          "text": "Cosa è migliorato\n• Peso medio in calo.\n\n<bad> & testo", "model": "test-model"}
     rich, classic = notify.telegram_content("plain", profile={"name": "Alex"}, analysis=a)
     assert "Analisi settimanale" in rich and "04/10" in rich and "10/10" in rich
-    assert "<h3>✅ Cosa è migliorato</h3>" in rich
+    assert "<h3>Cosa è migliorato</h3>" in rich
     assert "&lt;bad&gt; &amp; testo" in rich and "<bad>" not in rich
     assert "test-model" in rich and "&lt;bad&gt;" in classic
 
@@ -107,10 +107,8 @@ def test_telegram_rich_final_and_draft(telegram_calls):
     assert asyncio.run(notify.telegram("Test <unsafe>"))
     assert asyncio.run(notify.telegram("Draft", draft_id=7))
     assert [method for method, _ in telegram_calls] == ["sendRichMessage", "sendRichMessageDraft"]
-    html = telegram_calls[0][1]["rich_message"]["html"]
-    assert "&lt;unsafe&gt;" in html
-    assert 'tg-button' in html and "http://dashboard.local:8800" in html
-    assert "reply_markup" not in telegram_calls[0][1]
+    assert "&lt;unsafe&gt;" in telegram_calls[0][1]["rich_message"]["html"]
+    assert telegram_calls[0][1]["reply_markup"]["inline_keyboard"][0][0]["url"] == "http://dashboard.local:8800"
     assert telegram_calls[1][1]["draft_id"] == 7 and "reply_markup" not in telegram_calls[1][1]
 
 

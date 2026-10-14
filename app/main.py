@@ -154,8 +154,7 @@ async def run_analysis(profile_id: int, week_end: date, kind: str, send: bool = 
             if send and notify.telegram_enabled(chat_id):
                 preview = {"week_start": data["week"]["start"], "week_end": data["week"]["end"],
                            "text": analysis.clean(partial), "lang": analysis.lang()}
-                live.update(notify.analysis_message(preview, p, analysis.lang()), profile=p, analysis=preview,
-                            pending=True)
+                live.update(notify.analysis_message(preview, p, analysis.lang()), profile=p, analysis=preview)
 
     pumping = asyncio.create_task(pump())
     try:
