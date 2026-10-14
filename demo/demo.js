@@ -366,12 +366,13 @@
 
   window.fetch = async (input, init = {}) => {
     const url = new URL(typeof input === "string" ? input : input.url, location.href);
-    if (url.origin !== location.origin || !url.pathname.startsWith("/api/")) return realFetch(input, init);
+    const apiBase = location.pathname.replace(/[^/]*$/, "") + "api/";
+    if (url.origin !== location.origin || !url.pathname.startsWith(apiBase)) return realFetch(input, init);
     const method = (init.method || (typeof input === "string" ? "GET" : input.method)).toUpperCase();
     let body = init.body;
     if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = null; } }
     await new Promise((r) => setTimeout(r, 20));   // a network round trip
-    return api(method, url.pathname.slice(5), url.searchParams, body);
+    return api(method, url.pathname.slice(apiBase.length), url.searchParams, body);
   };
 
   // The dashboard asks for profile photos by URL (<img src>); scripts/build_demo.py points it here.

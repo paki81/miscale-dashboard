@@ -6,10 +6,10 @@
 <title>Mi Scale Dashboard</title>
 <meta name="description" content="Live weigh-ins, body composition and history from the Xiaomi Mi Body Composition Scale 2.">
 <meta name="theme-color" content="#f5f5f2">
-<link rel="icon" href="/static/icons/favicon.png" type="image/png">
-<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="static/icons/favicon.png" type="image/png">
+<link rel="manifest" href="manifest.webmanifest">
 <!-- iOS: installs from Share > Add to Home Screen -->
-<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="static/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Mi Scale">
@@ -18,7 +18,7 @@
   // Apply the saved theme before the first paint, so the page doesn't flash.
   try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
 </script>
-<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="static/vendor/chart.umd.min.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -595,6 +595,8 @@ function applyStrings() {
 }
 
 // ---------- Helpers ----------
+// Base path of the app: "/" normally, or the prefix it is mounted behind (e.g. "/scale/").
+const BASE = location.pathname.replace(/[^/]*$/, "");
 const $ = (id) => document.getElementById(id);
 const profileDlg = $("profileDlg"), settingsDlg = $("settingsDlg");
 let all = [], profiles = [], settings = { unit: "kg", tolerance_kg: 5 }, chart, days = 30, resetTimer, editing = null;
@@ -638,7 +640,7 @@ function initials(name) {
 }
 
 function avatar(p, src) {
-  const url = src || (p?.photo ? `/api/profiles/${p.id}/photo?${p.photo.split("?")[1] || ""}` : null);
+  const url = src || (p?.photo ? `${BASE}api/profiles/${p.id}/photo?${p.photo.split("?")[1] || ""}` : null);
   return `<span class="avatar">${url ? `<img src="${url}" alt="">` : esc(initials(p?.name))}</span>`;
 }
 
@@ -668,14 +670,24 @@ function redrawChart() { if (chart) { chart.destroy(); chart = null; } if (profi
 
 // ---------- Data ----------
 let deferred = false;   // new data arrived while the weigh-in screen was open
+let deepLinkDone = false;   // a ?m= link opens the results view only on the first load
 async function load(animate = false) {
   [all, profiles, settings] = await Promise.all([
-    fetch("/api/measurements").then((r) => r.json()),
-    fetch("/api/profiles").then((r) => r.json()),
-    fetch("/api/settings").then((r) => r.json()),
+    fetch(BASE + "api/measurements").then((r) => r.json()),
+    fetch(BASE + "api/profiles").then((r) => r.json()),
+    fetch(BASE + "api/settings").then((r) => r.json()),
   ]);
   if (!profileOf(current)) current = profiles[0]?.id ?? null;
   for (const pid in analyses) delete analyses[pid];   // fetched again with the rest
+  // A notification link (?m=<id>, or "last") opens that weigh-in's results, once.
+  if (!deepLinkDone) {
+    deepLinkDone = true;
+    const mid = new URLSearchParams(location.search).get("m");
+    if (mid) {
+      const m = all.find((x) => String(x.id) === mid) ?? all.find((x) => x.id > 0);
+      setTimeout(() => openDeepResults(m), 300);
+    }
+  }
   // While the weigh-in is on screen, the dashboard only changes (animated) once it closes.
   if (scanOpen()) { deferred = true; return; }
   render(animate);
@@ -808,7 +820,7 @@ async function loadAnalysis(force = false) {
   if (!current || !settings.ai_enabled) return renderAnalysis();
   if (force || !(current in analyses)) {
     const pid = current;
-    const list = await fetch(`/api/analyses?profile_id=${pid}&limit=1`).then((r) => r.ok ? r.json() : []).catch(() => []);
+    const list = await fetch(`${BASE}api/analyses?profile_id=${pid}&limit=1`).then((r) => r.ok ? r.json() : []).catch(() => []);
     analyses[pid] = list[0] || null;
   }
   renderAnalysis();
@@ -912,7 +924,7 @@ async function runAnalysis() {
   startTyping(pid);
   let r;
   const send = $("anSend").checked ? "&send=true" : "";
-  try { r = await fetch(`/api/analyses/run?profile_id=${pid}${send}`, { method: "POST" }); } catch (err) { r = null; }
+  try { r = await fetch(`${BASE}api/analyses/run?profile_id=${pid}${send}`, { method: "POST" }); } catch (err) { r = null; }
   if (r?.ok) return endTyping(await r.json());
   const detail = r ? (await r.json().catch(() => ({}))).detail : "network";
   const note = r?.status === 409 ? t(String(detail).includes("already") ? "analysisBusy" : "analysisNoData")
@@ -1007,14 +1019,14 @@ function renderHistory(animate = false) {
 $("showAll").addEventListener("change", () => renderHistory());
 
 async function assign(id, pid) {
-  await fetch(`/api/measurements/${id}`, { method: "PATCH", headers: { "content-type": "application/json" },
+  await fetch(`${BASE}api/measurements/${id}`, { method: "PATCH", headers: { "content-type": "application/json" },
     body: JSON.stringify({ profile_id: pid ? +pid : null }) });
   load();
 }
 
 async function del(id) {
   if (!confirm(t("deleteMeasurement"))) return;
-  await fetch(`/api/measurements/${id}`, { method: "DELETE" });
+  await fetch(`${BASE}api/measurements/${id}`, { method: "DELETE" });
   load();
 }
 
@@ -1071,7 +1083,7 @@ $("pFile").addEventListener("change", async (e) => {
 async function removePhoto() {
   if (pendingPhoto) { pendingPhoto = null; $("pFile").value = ""; renderPhotoEdit(editing ? profileOf(editing) : {}); return; }
   if (!editing) return;
-  await fetch(`/api/profiles/${editing}/photo`, { method: "DELETE" });
+  await fetch(`${BASE}api/profiles/${editing}/photo`, { method: "DELETE" });
   await load();
   renderPhotoEdit(profileOf(editing));
 }
@@ -1082,12 +1094,12 @@ async function saveProfile(e) {
   const body = { name: $("pName").value.trim(), height_cm: +$("pHeight").value || null, birth: $("pBirth").value || null,
     male: $("pMale").value === "1", ref_weight: ref && (unit() === "lb" ? +(ref * LB).toFixed(2) : ref),
     telegram_chat_id: $("pChat").value.trim() || null, notify: $("pNotify").checked };
-  const r = await fetch(editing ? `/api/profiles/${editing}` : "/api/profiles", {
+  const r = await fetch(editing ? `${BASE}api/profiles/${editing}` : BASE + "api/profiles", {
     method: editing ? "PUT" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) { alert(JSON.stringify((await r.json().catch(() => ({}))).detail)); return; }
   const p = await r.json();
   if (pendingPhoto) {
-    const up = await fetch(`/api/profiles/${p.id}/photo`, { method: "PUT", headers: { "content-type": "image/jpeg" }, body: pendingPhoto });
+    const up = await fetch(`${BASE}api/profiles/${p.id}/photo`, { method: "PUT", headers: { "content-type": "image/jpeg" }, body: pendingPhoto });
     if (!up.ok) alert(t("photoFailed") + (await up.text()));
   }
   profileDlg.close();
@@ -1099,7 +1111,7 @@ async function saveProfile(e) {
 async function deleteProfile() {
   const p = profileOf(editing);
   if (!confirm(t("confirmDeleteProfile", { name: p.name }))) return;
-  await fetch(`/api/profiles/${editing}`, { method: "DELETE" });
+  await fetch(`${BASE}api/profiles/${editing}`, { method: "DELETE" });
   profileDlg.close();
   current = null;
   load();
@@ -1126,7 +1138,7 @@ async function saveSettings(e) {
   lang = resolveLang($("sLang").value);
   const u = $("sUnit").value;
   const tol = +$("sTol").value || 5;
-  settings = await fetch("/api/settings", { method: "PUT", headers: { "content-type": "application/json" },
+  settings = await fetch(BASE + "api/settings", { method: "PUT", headers: { "content-type": "application/json" },
     body: JSON.stringify({ unit: u, tolerance_kg: u === "lb" ? +(tol * LB).toFixed(2) : tol }) }).then((r) => r.json());
   settingsDlg.close();
   $("liveNum")._val = null;
@@ -1270,6 +1282,29 @@ function showResults() {
   }
 }
 
+// Opened from a notification link (?m=<id>): show that measurement's results view.
+function openDeepResults(m) {
+  if (!m || scanOpen()) return;
+  scanDismissed = false;
+  openScan();
+  const p = profileOf(m.profile_id);
+  if (p && p.id !== current) select(p.id);
+  const time = new Date(m.measured_at).getTime();
+  const prev = p && all.find((h) => h.profile_id === p.id && h.id !== m.id
+    && time - new Date(h.measured_at).getTime() >= 180000);
+  const delta = p && prev ? `${p.name} · ` + t("since",
+    { d: signed(mass(m.weight_kg) - mass(prev.weight_kg), 2, " " + unit()), when: fmtDate(prev.measured_at) })
+    : p ? p.name : "";
+  showScan({ weight_kg: m.weight_kg, impedance: m.impedance, stabilized: true, removed: true },
+           p ? { p } : null, delta);
+  scanMeasurement(m, false);
+  showResults();
+  // Opened on purpose from a link: keep the result on screen instead of auto-closing.
+  clearTimeout(closeTimer);
+  $("scanTimer").classList.remove("run");
+  $("scanHint").classList.remove("on");
+}
+
 function showScan(msg, g, deltaText) {
   const scan = $("scan");
   // Settling weight: a new weigh-in started.
@@ -1334,7 +1369,7 @@ function showLive(msg) {
 function setConn(cls, key) { $("connDot").className = "dot " + cls; $("connText").dataset.t = key; $("connText").textContent = t(key); }
 
 function connect() {
-  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${BASE}ws`);
   ws.onopen = () => setConn("on", "live");
   ws.onclose = () => { setConn("err", "reconnecting"); setTimeout(connect, 2000); };
   ws.onmessage = (e) => {
@@ -1354,7 +1389,7 @@ function connect() {
 
 // ---------- Installable app (PWA) ----------
 let installPrompt = null;
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register(BASE + "sw.js").catch(() => {});
 window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; $("installBtn").hidden = false; });
 window.addEventListener("appinstalled", () => { installPrompt = null; $("installBtn").hidden = true; });
 async function install() {

@@ -18,17 +18,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "app" / "static"
-CHART = '<script src="/static/vendor/chart.umd.min.js"></script>'
+CHART = '<script src="static/vendor/chart.umd.min.js"></script>'
 DEMO_SCRIPTS = '<script src="demo/body.js"></script>\n<script src="demo/demo.js"></script>'
 
 # (original, replacement): each original must be in index.html, so a change there that the
 # demo doesn't know about stops the build instead of shipping a broken page.
 EDITS = [
     ("<title>Mi Scale Dashboard</title>", "<title>Mi Scale Dashboard · Demo</title>"),
-    (CHART, CHART.replace('"/static/', '"static/') + "\n" + DEMO_SCRIPTS),
-    ('href="/static/', 'href="static/'),
-    ('href="/manifest.webmanifest"', 'href="manifest.webmanifest"'),
-    ('`/api/profiles/${p.id}/photo?${p.photo.split("?")[1] || ""}`', "demoPhotoUrl(p)"),
+    (CHART, CHART + "\n" + DEMO_SCRIPTS),
+    ('`${BASE}api/profiles/${p.id}/photo?${p.photo.split("?")[1] || ""}`', "demoPhotoUrl(p)"),
 ]
 
 

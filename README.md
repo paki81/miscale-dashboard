@@ -193,7 +193,7 @@ unit, the language and the tolerance for recognizing people are changed in the w
 | `MISCALE_SCALE_MAC` | empty | Only accept this scale. Empty accepts any XMTZC05HM in range (useful if a neighbor has one too) |
 | `MISCALE_DB` | `/data/miscale.db` | SQLite database path; photos go in `photos/` next to it |
 | `MISCALE_LANG` | `en` | Language of notifications: `en`, `pt-BR` or `it` |
-| `MISCALE_PUBLIC_URL` | empty | Dashboard link appended to notifications |
+| `MISCALE_PUBLIC_URL` | empty | Dashboard link appended to notifications; weigh-ins deep-link to `?m=<id>`, which opens that measurement's results view |
 | `MISCALE_WEBHOOK_URL` | empty | POST a JSON message for every weigh-in |
 | `MISCALE_TELEGRAM_TOKEN` | empty | Bot token from [@BotFather](https://t.me/BotFather) |
 | `MISCALE_TELEGRAM_CHAT_ID` | empty | Chat that receives the messages |
@@ -234,7 +234,8 @@ Impedance 478 Ω
 
 Telegram uses [Rich Messages](https://core.telegram.org/bots/api#sendrichmessage) with the weight
 in bold, a compact summary table, expandable measurement details and an **Open dashboard** button
-when `MISCALE_PUBLIC_URL` is set to an HTTP(S) URL. English, Portuguese and Italian are supported;
+when `MISCALE_PUBLIC_URL` is set to an HTTP(S) URL — it may include a path prefix, e.g.
+`https://host/scale/` behind a reverse proxy. English, Portuguese and Italian are supported;
 only available metrics are shown. If the rich API is unavailable, the notifier falls back to classic
 HTML. Set `MISCALE_TELEGRAM_FORMAT=html` to choose classic HTML explicitly.
 

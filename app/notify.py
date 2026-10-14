@@ -89,6 +89,13 @@ def _mass(kg, unit, d=1, lang=LANG):
     return f"{_num(kg / LB, d, lang)} lb" if unit == "lb" else f"{_num(kg, d, lang)} kg"
 
 
+def _link(m: dict | None) -> str:
+    """The public dashboard URL, deep-linked to a measurement's results view when possible."""
+    if not PUBLIC_URL or not m or not isinstance(m.get("id"), int) or m["id"] < 0:
+        return PUBLIC_URL
+    return f"{PUBLIC_URL}{'&' if '?' in PUBLIC_URL else '?'}m={m['id']}"
+
+
 def _trend(m: dict, history: list[dict], unit: str, lang: str) -> list[str]:
     t = TEXT.get(lang, TEXT["en"])
     when = datetime.fromisoformat(m["measured_at"])
@@ -111,7 +118,7 @@ def message(m: dict, profile: dict | None, history: list[dict], unit: str = "kg"
     if not profile:
         lines = [t["unknown"].format(w=_mass(m["weight_kg"], unit, 2, lang))]
         if PUBLIC_URL:
-            lines.append(PUBLIC_URL)
+            lines.append(_link(m))
         return "\n".join(lines)
     lines = [f"⚖️ {profile['name']} · {_mass(m['weight_kg'], unit, 2, lang)}"]
 
@@ -134,7 +141,7 @@ def message(m: dict, profile: dict | None, history: list[dict], unit: str = "kg"
     if not profile.get("height_cm") or not profile.get("birth"):
         lines.append(t["no_height"])
     if PUBLIC_URL:
-        lines.append(PUBLIC_URL)
+        lines.append(_link(m))
     return "\n".join(lines)
 
 
@@ -320,7 +327,8 @@ async def telegram(text: str, draft_id: int | None = None, chat_id: str | None =
         if url.scheme in ("http", "https") and url.netloc:
             lang = content.get("lang") or (content.get("analysis") or {}).get("lang") or LANG
             label = TELEGRAM_TEXT.get(lang, TELEGRAM_TEXT["en"])["dashboard"]
-            base["reply_markup"] = {"inline_keyboard": [[{"text": label, "url": PUBLIC_URL}]]}
+            base["reply_markup"] = {"inline_keyboard": [[{"text": label,
+                                                          "url": _link(content.get("measurement"))}]]}
     methods = []
     if TELEGRAM_FORMAT == "photo" and draft_id is None and content.get("profile") and (
             content.get("measurement") or content.get("analysis")):

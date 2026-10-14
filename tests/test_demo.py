@@ -22,13 +22,13 @@ def test_build_demo(tmp_path):
     assert html.index('src="demo/body.js"') < html.index('src="demo/demo.js"') < html.index("const STRINGS")
     # Nothing absolute that would miss the /miscale-dashboard/ base path on GitHub Pages...
     assert not re.search(r'(src|href)="/', html)
-    # ...and every /api call left is a fetch(), which demo.js answers from memory.
-    for line in (line for line in html.splitlines() if "/api/" in line):
-        assert re.search(r'fetch\(.*[`"]/api/', line), line
+    # ...and every api call left is a fetch(), which demo.js answers from memory.
+    for line in (line for line in html.splitlines() if re.search(r'["}]api/', line)):
+        assert "fetch(" in line, line
     assert "demoPhotoUrl(p)" in html
     # The page asks for the weekly analysis; the demo answers it and simulates its stream.
     demo_js = (site / "demo" / "demo.js").read_text()
-    assert "/api/analyses/run" in html and '"analyses/run"' in demo_js and "analysis_delta" in demo_js
+    assert "api/analyses/run" in html and '"analyses/run"' in demo_js and "analysis_delta" in demo_js
     for path in ("demo/demo.js", "demo/body.js", "demo/alex.jpg", "static/vendor/chart.umd.min.js",
                  "static/icons/icon-192.png"):
         assert (site / path).is_file(), path
