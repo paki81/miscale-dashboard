@@ -116,10 +116,7 @@ def message(m: dict, profile: dict | None, history: list[dict], unit: str = "kg"
     t = TEXT.get(lang, TEXT["en"])
     x = m.get("metrics") or {}
     if not profile:
-        lines = [t["unknown"].format(w=_mass(m["weight_kg"], unit, 2, lang))]
-        if PUBLIC_URL:
-            lines.append(_link(m))
-        return "\n".join(lines)
+        return t["unknown"].format(w=_mass(m["weight_kg"], unit, 2, lang))
     lines = [f"⚖️ {profile['name']} · {_mass(m['weight_kg'], unit, 2, lang)}"]
 
     trend = _trend(m, history, unit, lang)
@@ -140,8 +137,6 @@ def message(m: dict, profile: dict | None, history: list[dict], unit: str = "kg"
         lines.append(t["no_impedance"])
     if not profile.get("height_cm") or not profile.get("birth"):
         lines.append(t["no_height"])
-    if PUBLIC_URL:
-        lines.append(_link(m))
     return "\n".join(lines)
 
 
@@ -149,8 +144,6 @@ def analysis_message(a: dict, profile: dict, lang: str = LANG) -> str:
     t = TEXT.get(lang, TEXT["en"])
     start, end = (datetime.fromisoformat(a[k]).strftime(t["day"]) for k in ("week_start", "week_end"))
     lines = [t["analysis"].format(name=profile["name"], start=start, end=end), "", a["text"]]
-    if PUBLIC_URL:
-        lines += ["", PUBLIC_URL]
     return "\n".join(lines)
 
 
