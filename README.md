@@ -157,6 +157,15 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
+Under PM2, environment variables are snapshotted in `~/.pm2/dump.pm2`: after editing `.env`,
+reload it into the shell, restart with the fresh environment and save, or reboots restore the
+old values:
+
+```bash
+set -a && . ./.env && set +a
+pm2 restart miscale-dashboard --update-env && pm2 save
+```
+
 ## Scanner remoto (ESP32/ESPHome)
 
 Keep the server on a NAS, VM or Proxmox LXC without Bluetooth, and place an ESP32 running
