@@ -51,8 +51,48 @@ def _weekday(value: str) -> int:
 WEEKDAY = _weekday(os.environ.get("MISCALE_AI_WEEKDAY", "5"))
 HOUR = min(max(int(os.environ.get("MISCALE_AI_HOUR", "9") or 9), 0), 23)
 
+# Values stored in the settings table override the env at runtime (set by main.configure).
+_overrides: Callable[[], dict] = lambda: {}
+
+
+def configure(getter: Callable[[], dict]) -> None:
+    """Give analysis a source of runtime settings (e.g. the DB) that take precedence over env."""
+    global _overrides
+    _overrides = getter
+
+
+def _ov(name: str, env):
+    """A stored value wins; a missing or empty one falls back to the env default."""
+    v = _overrides().get(name)
+    return env if v is None or (isinstance(v, str) and not v.strip()) else v
+
+
+def api_key() -> str:
+    # An explicitly empty stored key means "no key" (e.g. a local Ollama), not "use env".
+    v = _overrides().get("ai_api_key")
+    return API_KEY if v is None else str(v).strip()
+
+
+def base_url() -> str:
+    return (str(_ov("ai_base_url", BASE_URL)).strip() or "https://api.openai.com/v1").rstrip("/")
+
+
+def models() -> list[str]:
+    return [m.strip() for m in str(_ov("ai_model", ",".join(MODELS))).split(",") if m.strip()]
+
+
+def ai_weekday() -> int:
+    return _weekday(str(_ov("ai_weekday", WEEKDAY)))
+
+
+def ai_hour() -> int:
+    return min(max(int(_ov("ai_hour", HOUR)), 0), 23)
+
 
 def enabled() -> bool:
+    v = _overrides().get("ai_enabled")
+    if v is not None:
+        return bool(v)
     if ENABLED in ("1", "true", "yes", "on"):
         return True
     if ENABLED in ("0", "false", "no", "off"):
@@ -61,7 +101,7 @@ def enabled() -> bool:
 
 
 def lang() -> str:
-    language = LANG.lower()
+    language = str(_ov("ai_lang", LANG)).lower()
     return "pt-BR" if language.startswith("pt") else "it" if language.startswith("it") else "en"
 
 
@@ -214,12 +254,15 @@ def stats(profile: dict, measurements: list[dict], week_end: date, unit: str = "
 
 
 # ---------- Weekly schedule ----------
-def due_week_end(now: datetime, weekday: int = WEEKDAY, hour: int = HOUR, grace_days: int = 2) -> date | None:
+def due_week_end(now: datetime, weekday: int | None = None, hour: int | None = None,
+                 grace_days: int = 2) -> date | None:
     """The day whose weekly analysis is due at `now`, or None.
 
     The analysis is due from `hour` on the scheduled weekday; if the server was off then, it
     still runs within the next `grace_days` days.
     """
+    weekday = ai_weekday() if weekday is None else weekday
+    hour = ai_hour() if hour is None else hour
     day = now.date() - timedelta(days=(now.weekday() - weekday) % 7)
     due = datetime.combine(day, datetime.min.time()) + timedelta(hours=hour)
     if now < due:
@@ -243,9 +286,9 @@ def _request(model: str, msgs: list[dict], stream: bool) -> urllib.request.Reque
     if stream:
         body["stream"] = True
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream" if stream else "application/json"}
-    if API_KEY:
-        headers["Authorization"] = f"Bearer {API_KEY}"
-    return urllib.request.Request(f"{BASE_URL}/chat/completions", data=json.dumps(body).encode(),
+    if api_key():
+        headers["Authorization"] = f"Bearer {api_key()}"
+    return urllib.request.Request(f"{base_url()}/chat/completions", data=json.dumps(body).encode(),
                                   headers=headers, method="POST")
 
 
@@ -304,7 +347,7 @@ def generate(data: dict, on_delta: Callable[[str, bool], None] | None = None,
     """
     msgs = messages(data, language)
     errors = []
-    for model in MODELS:
+    for model in models():
         first = True
 
         def delta(piece: str):

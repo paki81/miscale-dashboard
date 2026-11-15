@@ -80,6 +80,22 @@ def test_language_and_switches(monkeypatch):
     assert analysis._weekday("0") == analysis._weekday("mon") == 0
 
 
+def test_settings_overrides(monkeypatch):
+    monkeypatch.setattr(analysis, "_overrides", lambda: {
+        "ai_enabled": True, "ai_base_url": " http://ollama.lan/v1 ", "ai_model": "a, b ",
+        "ai_api_key": "", "ai_weekday": 0, "ai_hour": 7, "ai_lang": "it"})
+    assert analysis.enabled() is True
+    assert analysis.base_url() == "http://ollama.lan/v1"
+    assert analysis.models() == ["a", "b"]
+    assert analysis.api_key() == ""          # an explicitly empty key means "no key", not "use env"
+    assert (analysis.ai_weekday(), analysis.ai_hour()) == (0, 7)
+    assert analysis.lang() == "it"
+    # Stored values can be switched off again, and empty strings fall back to env.
+    monkeypatch.setattr(analysis, "_overrides", lambda: {"ai_enabled": False, "ai_model": " "})
+    assert analysis.enabled() is False
+    assert analysis.models() == analysis.MODELS
+
+
 def test_clean_drops_markdown():
     text = "## What improved\n• **Body fat** down\n• 2) Water up"
     assert analysis.clean(text) == "What improved\n• Body fat down\n• Water up"

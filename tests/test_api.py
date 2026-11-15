@@ -27,6 +27,14 @@ def test_profiles_measurements_and_settings(tmp_path):
         assert m["profile_id"] == p["id"] and m["metrics"]["body_fat"] > 0
         assert c.put("/api/settings", json={"unit": "lb"}).json()["unit"] == "lb"
         assert c.put("/api/settings", json={"unit": "stone"}).status_code == 422
+        s = c.put("/api/settings", json={"ai_enabled": True, "ai_base_url": "http://ollama.lan:11434/v1",
+                                         "ai_model": "qwen3.5:4b", "ai_api_key": "sk-x",
+                                         "ai_weekday": 0, "ai_hour": 7, "ai_lang": "it"}).json()
+        assert s["ai_enabled"] is True and s["ai_base_url"] == "http://ollama.lan:11434/v1"
+        assert s["ai_api_key"] == "***" and (s["ai_weekday"], s["ai_hour"]) == (0, 7)
+        # Sending the mask back (untouched field) does not overwrite the stored key.
+        assert c.put("/api/settings", json={"ai_api_key": "***"}).json()["ai_api_key"] == "***"
+        assert c.get("/api/settings").json()["ai_model"] == "qwen3.5:4b"
         r = c.put(f"/api/profiles/{p['id']}/photo", content=b"\xff\xd8fake", headers={"content-type": "image/jpeg"})
         assert r.status_code == 200 and c.get(f"/api/profiles/{p['id']}/photo").content == b"\xff\xd8fake"
         bad = c.put(f"/api/profiles/{p['id']}/photo", content=b"x", headers={"content-type": "text/plain"})

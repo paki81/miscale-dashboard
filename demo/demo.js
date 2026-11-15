@@ -38,7 +38,8 @@
   const db = { profiles: [], measurements: [], analyses: [], settings: { tolerance_kg: 5.0, unit: "kg" },
     nextId: 1, nextPid: 1, nextAid: 1 };
   // What the server reports about the weekly analysis: on, every Saturday at 9:00.
-  const AI = { ai_enabled: true, ai_weekday: 5, ai_hour: 9 };
+  const AI = { ai_enabled: true, ai_weekday: 5, ai_hour: 9, ai_base_url: "http://192.168.1.10:11434/v1",
+               ai_model: "qwen3.5:4b", ai_lang: "en", ai_api_key: "" };
   const LB = 0.45359237;
   const photos = {};   // profile id -> image URL (the bundled photo or an uploaded blob)
 

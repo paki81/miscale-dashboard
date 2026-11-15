@@ -425,6 +425,18 @@ tr.new td { animation: rowIn 2.4s ease; }
     <select id="sUnit"><option value="kg">kg</option><option value="lb">lb</option></select>
     <label id="sTolLabel"></label><input id="sTol" type="number" step="0.5" min="0.5" max="50">
     <p class="note" data-t="tolNote"></p>
+    <h3 data-t="aiSection" style="font-size:15px; margin:14px 0 2px"></h3>
+    <label style="margin:0; display:flex; gap:6px; align-items:center"><input type="checkbox" id="sAiOn" style="width:auto"> <span data-t="aiEnable"></span></label>
+    <label data-t="aiBase"></label><input id="sAiBase" type="text" spellcheck="false" placeholder="http://192.168.1.10:11434/v1">
+    <label data-t="aiModel"></label><input id="sAiModel" type="text" spellcheck="false" placeholder="qwen3.5:4b">
+    <label data-t="aiKey"></label><input id="sAiKey" type="password" autocomplete="off" spellcheck="false">
+    <p class="note" data-t="aiKeyNote"></p>
+    <div style="display:flex; gap:12px">
+      <span><label data-t="aiDay"></label><select id="sAiDay"></select></span>
+      <span><label data-t="aiHourLabel"></label><input id="sAiHour" type="number" min="0" max="23" style="width:74px"></span>
+      <span><label data-t="aiLangLabel"></label><select id="sAiLang"><option value="en">English</option><option value="it">Italiano</option><option value="pt-BR">Português</option></select></span>
+    </div>
+    <p class="note" data-t="aiNote"></p>
     <div class="row">
       <button type="button" onclick="settingsDlg.close()" data-t="cancel"></button><button class="primary" data-t="save"></button>
     </div>
@@ -475,7 +487,11 @@ const STRINGS = {
     notifyTelegram: "Notify on Telegram",
     analysisEmpty: "No analysis yet. The next one is written on {day} at {hour}, or generate one now.",
     analysisMeta: "Written {when} · {model}",
-    analysisOff: "A short weekly summary of your trends, written by an AI model (OpenAI, OpenRouter or a local Ollama). To turn it on, set {var} on the server.",
+    analysisOff: "A short weekly summary of your trends, written by an AI model (OpenAI, OpenRouter or a local Ollama). Turn it on in Settings or set {var} on the server.",
+    aiSection: "AI weekly analysis", aiEnable: "Enabled", aiBase: "Provider URL (OpenAI-compatible)",
+    aiModel: "Model", aiKey: "API key", aiDay: "Written every", aiHourLabel: "at hour", aiLangLabel: "Language",
+    aiKeyNote: "\"***\" keeps the current key; empty means no key (e.g. a local Ollama).",
+    aiNote: "An empty URL or model falls back to the server's MISCALE_AI_* values.",
     analysisHowTo: "How to enable it", analysisDocs: "https://github.com/BrOrlandi/miscale-dashboard#ai-weekly-analysis-optional",
     analysisNoData: "No weigh-in in the last 7 days to analyze yet.", analysisBusy: "An analysis is already being written.",
     analysisFailed: "The analysis failed: {detail}",
@@ -521,7 +537,11 @@ const STRINGS = {
     notifyTelegram: "Notificar no Telegram",
     analysisEmpty: "Nenhuma análise ainda. A próxima sai {day} às {hour}, ou gere uma agora.",
     analysisMeta: "Escrita em {when} · {model}",
-    analysisOff: "Um resumo curto da sua semana, escrito por um modelo de IA (OpenAI, OpenRouter ou um Ollama local). Para ligar, defina {var} no servidor.",
+    analysisOff: "Um resumo curto da sua semana, escrito por um modelo de IA (OpenAI, OpenRouter ou um Ollama local). Ative nas Configurações ou defina {var} no servidor.",
+    aiSection: "Análise semanal com IA", aiEnable: "Ativada", aiBase: "URL do provedor (compatível com OpenAI)",
+    aiModel: "Modelo", aiKey: "Chave de API", aiDay: "Escrita toda", aiHourLabel: "às (hora)", aiLangLabel: "Idioma",
+    aiKeyNote: "\"***\" mantém a chave atual; vazio significa sem chave (ex.: um Ollama local).",
+    aiNote: "URL ou modelo vazios usam os valores MISCALE_AI_* do servidor.",
     analysisHowTo: "Como ligar", analysisDocs: "https://github.com/BrOrlandi/miscale-dashboard/blob/main/README.pt-BR.md#análise-semanal-com-ia-opcional",
     analysisNoData: "Ainda não há pesagem nos últimos 7 dias para analisar.", analysisBusy: "Uma análise já está sendo escrita.",
     analysisFailed: "A análise falhou: {detail}",
@@ -567,7 +587,11 @@ const STRINGS = {
     notifyTelegram: "Notifica su Telegram",
     analysisEmpty: "Nessuna analisi disponibile. La prossima sarà scritta {day} alle {hour}, oppure generane una ora.",
     analysisMeta: "Scritta {when} · {model}",
-    analysisOff: "Un breve riepilogo settimanale delle tue tendenze, scritto da un modello IA (OpenAI, OpenRouter o Ollama locale). Per attivarlo, imposta {var} sul server.",
+    analysisOff: "Un breve riepilogo settimanale delle tue tendenze, scritto da un modello IA (OpenAI, OpenRouter o Ollama locale). Attivalo nelle Impostazioni o imposta {var} sul server.",
+    aiSection: "Analisi IA settimanale", aiEnable: "Attiva", aiBase: "URL del provider (compatibile OpenAI)",
+    aiModel: "Modello", aiKey: "Chiave API", aiDay: "Scritta ogni", aiHourLabel: "alle ore", aiLangLabel: "Lingua",
+    aiKeyNote: "\"***\" mantiene la chiave attuale; vuoto significa nessuna chiave (es. un Ollama locale).",
+    aiNote: "URL o modello vuoti usano i valori MISCALE_AI_* del server.",
     analysisHowTo: "Come attivarla", analysisDocs: "https://github.com/BrOrlandi/miscale-dashboard#ai-weekly-analysis-optional",
     analysisNoData: "Nessuna rilevazione negli ultimi 7 giorni da analizzare.", analysisBusy: "È già in corso la scrittura di un’analisi.",
     analysisFailed: "L’analisi non è riuscita: {detail}",
@@ -1123,6 +1147,14 @@ function openSettings() {
   $("sUnit").value = unit();
   $("sTolLabel").textContent = t("tolerance", { unit: unit() });
   $("sTol").value = +mass(settings.tolerance_kg ?? 5).toFixed(1);
+  $("sAiOn").checked = !!settings.ai_enabled;
+  $("sAiBase").value = settings.ai_base_url ?? "";
+  $("sAiModel").value = settings.ai_model ?? "";
+  $("sAiKey").value = settings.ai_api_key ?? "";
+  $("sAiDay").innerHTML = [0, 1, 2, 3, 4, 5, 6].map((i) => `<option value="${i}">${weekdayName(i)}</option>`).join("");
+  $("sAiDay").value = settings.ai_weekday ?? 5;
+  $("sAiHour").value = settings.ai_hour ?? 9;
+  $("sAiLang").value = settings.ai_lang ?? "en";
   settingsDlg.showModal();
 }
 $("sUnit").addEventListener("change", () => {
@@ -1138,8 +1170,13 @@ async function saveSettings(e) {
   lang = resolveLang($("sLang").value);
   const u = $("sUnit").value;
   const tol = +$("sTol").value || 5;
+  const key = $("sAiKey").value;
   settings = await fetch(BASE + "api/settings", { method: "PUT", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ unit: u, tolerance_kg: u === "lb" ? +(tol * LB).toFixed(2) : tol }) }).then((r) => r.json());
+    body: JSON.stringify({ unit: u, tolerance_kg: u === "lb" ? +(tol * LB).toFixed(2) : tol,
+      ai_enabled: $("sAiOn").checked, ai_base_url: $("sAiBase").value.trim(),
+      ai_model: $("sAiModel").value.trim(), ai_weekday: +$("sAiDay").value,
+      ai_hour: Math.min(Math.max(Math.round(+$("sAiHour").value || 9), 0), 23), ai_lang: $("sAiLang").value,
+      ...(key === "***" ? {} : { ai_api_key: key.trim() }) }) }).then((r) => r.json());
   settingsDlg.close();
   $("liveNum")._val = null;
   redrawChart();

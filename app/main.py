@@ -44,6 +44,10 @@ def settings() -> dict:
     return {**DEFAULTS, **db.settings()}
 
 
+# Let the AI analysis read its ai_* settings from the table, with env as fallback.
+analysis.configure(settings)
+
+
 class Hub:
     """Connected browsers, fed over WebSocket."""
 
@@ -193,7 +197,7 @@ async def weekly_scheduler():
     while True:
         try:
             now = datetime.now()
-            day = analysis.due_week_end(now)
+            day = analysis.due_week_end(now) if analysis.enabled() else None
             for p in db.profiles() if day else []:
                 if db.has_weekly(p["id"], day.isoformat()) or retry_at.get(p["id"], now) > now:
                     continue
@@ -218,10 +222,12 @@ async def lifespan(app):
         tasks.append(asyncio.create_task(listener.run()))
     else:
         log.info("BLE scanner disabled (MISCALE_SCANNER=off)")
+    tasks.append(asyncio.create_task(weekly_scheduler()))
     if analysis.enabled():
-        tasks.append(asyncio.create_task(weekly_scheduler()))
-        log.info("weekly AI analysis on: %s at %s, every %s at %02d:00", ", ".join(analysis.MODELS), analysis.BASE_URL,
-                 analysis.WEEKDAYS[analysis.WEEKDAY], analysis.HOUR)
+        log.info("weekly AI analysis on: %s at %s, every %s at %02d:00", ", ".join(analysis.models()),
+                 analysis.base_url(), analysis.WEEKDAYS[analysis.ai_weekday()], analysis.ai_hour())
+    else:
+        log.info("weekly AI analysis off: enable it in Settings or with MISCALE_AI_*")
     yield
     for task in tasks:
         task.cancel()
@@ -398,9 +404,15 @@ async def run_analysis_now(profile_id: int, send: bool = False):
 
 
 # ---------- Settings ----------
+API_KEY_MASK = "***"
+
+
 def public_settings() -> dict:
-    """Settings plus what the UI needs to know about the weekly analysis (read-only)."""
-    return {**settings(), "ai_enabled": analysis.enabled(), "ai_weekday": analysis.WEEKDAY, "ai_hour": analysis.HOUR}
+    """Settings plus what the UI needs to know about the weekly analysis (api key is masked)."""
+    return {**settings(), "ai_enabled": analysis.enabled(), "ai_weekday": analysis.ai_weekday(),
+            "ai_hour": analysis.ai_hour(), "ai_base_url": analysis.base_url(),
+            "ai_model": ", ".join(analysis.models()), "ai_lang": analysis.lang(),
+            "ai_api_key": API_KEY_MASK if analysis.api_key() else ""}
 
 
 @app.get("/api/settings")
@@ -411,11 +423,21 @@ def get_settings():
 class SettingsPatch(BaseModel):
     tolerance_kg: float | None = Field(None, gt=0, le=50)
     unit: Literal["kg", "lb"] | None = None
+    ai_enabled: bool | None = None
+    ai_base_url: str | None = Field(None, max_length=300)
+    ai_api_key: str | None = Field(None, max_length=300)
+    ai_model: str | None = Field(None, max_length=300)
+    ai_weekday: int | None = Field(None, ge=0, le=6)
+    ai_hour: int | None = Field(None, ge=0, le=23)
+    ai_lang: Literal["en", "pt-BR", "it"] | None = None
 
 
 @app.put("/api/settings")
 def put_settings(patch: SettingsPatch):
-    db.set_settings(patch.model_dump(exclude_none=True))
+    data = patch.model_dump(exclude_none=True)
+    if data.get("ai_api_key") == API_KEY_MASK:
+        del data["ai_api_key"]  # the UI sends the mask back when the key field is untouched
+    db.set_settings(data)
     return public_settings()
 
 
