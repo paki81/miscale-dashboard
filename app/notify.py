@@ -156,12 +156,14 @@ TELEGRAM_TEXT = {
     "en": {
         "measurement": "Weigh-in", "pending": "Stable weight · measuring body composition…",
         "details": "Measurement details", "dashboard": "Open dashboard",
+        "col_metric": "Metric", "col_value": "Value",
         "labels": ("Body fat", "Muscle", "Water", "BMI", "Protein", "Bone mass", "Fat mass", "Visceral fat", "BMR"),
         "sections": ("What improved", "What needs attention", "For next week"),
     },
     "pt-BR": {
         "measurement": "Pesagem", "pending": "Peso estável · medindo a composição corporal…",
         "details": "Detalhes da medição", "dashboard": "Abrir painel",
+        "col_metric": "Métrica", "col_value": "Valor",
         "labels": ("Gordura", "Músculo", "Água", "IMC", "Proteína", "Ossos", "Massa gorda",
                    "Gordura visceral", "Metabolismo basal"),
         "sections": ("O que melhorou", "O que pede atenção", "Para a próxima semana"),
@@ -169,11 +171,20 @@ TELEGRAM_TEXT = {
     "it": {
         "measurement": "Rilevazione", "pending": "Peso stabile · composizione corporea in corso…",
         "details": "Dettagli della misurazione", "dashboard": "Apri dashboard",
+        "col_metric": "Parametro", "col_value": "Valore",
         "labels": ("Grasso corporeo", "Muscoli", "Acqua", "IMC", "Proteine", "Massa ossea", "Massa grassa",
                    "Grasso viscerale", "Metabolismo basale"),
         "sections": ("Cosa è migliorato", "Cosa richiede attenzione", "Per la prossima settimana"),
     },
 }
+
+
+def _md(value: str) -> str:
+    """Escape dynamic text for Telegram Rich Markdown (which also parses inline HTML)."""
+    text = escape(value, quote=False)
+    for ch in ("\\", "*", "_", "~", "`", "[", "]", "|"):
+        text = text.replace(ch, f"\\{ch}")
+    return text
 
 
 def telegram_content(text: str, measurement: dict | None = None, profile: dict | None = None,
@@ -185,68 +196,90 @@ def telegram_content(text: str, measurement: dict | None = None, profile: dict |
     rich, classic = [], []
 
     def heading(value: str, size: int = 2):
-        safe = escape(value)
-        rich.append(f"<h{size}>{safe}</h{size}>")
-        classic.append(f"<b>{safe}</b>")
+        rich.append(f"{'#' * size} {_md(value)}")
+        classic.append(f"<b>{escape(value)}</b>")
 
     def paragraph(value: str):
-        safe = escape(value)
-        rich.append("<p>" + safe.replace("\n", "<br>") + "</p>")
-        classic.append(safe)
+        rich.append(_md(value))
+        classic.append(escape(value))
 
     if measurement and profile:
-        heading(f"{labels['measurement']} · {profile['name']}")
-        weight = escape(_mass(measurement["weight_kg"], unit, 2, lang))
-        rich.append(f"<p><strong>{weight}</strong></p>")
-        classic.append(f"<b>{weight}</b>")
-        paragraph(datetime.fromisoformat(measurement["measured_at"]).strftime("%d/%m/%Y %H:%M"))
-        for trend in _trend(measurement, history or [], unit, lang):
-            paragraph(trend)
+        heading(f"⚖️ {labels['measurement']} · {profile['name']}")
+        weight_raw = _mass(measurement["weight_kg"], unit, 2, lang)
+        rich.append(f"### **{_md(weight_raw)}**")
+        classic.append(f"<b>{escape(weight_raw)}</b>")
+        trends = _trend(measurement, history or [], unit, lang)
+        if trends:
+            rich.append("\n".join(f"> {_md(line)}" for line in trends))
+            classic.extend(escape(line) for line in trends)
+        when_str = datetime.fromisoformat(measurement["measured_at"]).strftime("%d/%m/%Y %H:%M")
+        classic.append(escape(when_str))
         if pending:
-            paragraph(labels["pending"])
+            rich.append(f"_{_md(labels['pending'])}_")
+            classic.append(escape(labels["pending"]))
         else:
-            rows, details = [], []
+            rows, detail_rows = [], []
             metrics = measurement.get("metrics") or {}
             for index, ((field, suffix, decimals), label) in enumerate(zip(METRIC_FIELDS, labels["labels"], strict=True)):
                 value = metrics.get(field)
                 if value is None:
                     continue
                 value = _mass(value, unit, decimals, lang) if suffix == "mass" else _num(value, decimals, lang) + suffix
-                safe_label, safe_value = escape(label), escape(value)
-                classic.append(f"<b>{safe_label}</b>  {safe_value}")
+                classic.append(f"<b>{escape(label)}</b>  {escape(value)}")
                 if index < 4:
-                    rows.append(f"<tr><td>{safe_label}</td><td>{safe_value}</td></tr>")
+                    rows.append(f"| {_md(label)} | **{_md(value)}** |")
                 else:
-                    details.append(f"<p><b>{safe_label}</b> {safe_value}</p>")
+                    detail_rows.append(f"| {_md(label)} | {_md(value)} |")
+            table_head = f"| {_md(labels['col_metric'])} | {_md(labels['col_value'])} |\n|:--|--:|"
             if rows:
-                rich.append("<table striped compact>" + "".join(rows) + "</table>")
+                rich.append("\n".join([table_head, *rows]))
             if measurement.get("impedance"):
-                value = t["impedance"].format(imp=measurement["impedance"])
-                details.append(f"<p>{escape(value)}</p>")
-                classic.append(escape(value))
+                imp_label = t["impedance"].format(imp=measurement["impedance"])
+                detail_rows.append(f"| {_md(imp_label.split()[0])} | {_md(str(measurement['impedance']) + ' Ω')} |")
+                classic.append(escape(imp_label))
             else:
                 paragraph(t["no_impedance"])
             if not profile.get("height_cm") or not profile.get("birth"):
                 paragraph(t["no_height"])
-            if details:
-                rich.append(f"<details><summary>{escape(labels['details'])}</summary>{''.join(details)}</details>")
+            if detail_rows:
+                detail_table = "\n".join([table_head, *detail_rows])
+                rich.append(f"<details><summary>{_md(labels['details'])}</summary>\n\n{detail_table}\n\n</details>")
+        rich.append(f"_{_md(when_str)}_")
     elif analysis and profile:
         start, end = (datetime.fromisoformat(analysis[k]).strftime(t["day"]) for k in ("week_start", "week_end"))
-        heading(t["analysis"].format(name=profile["name"], start=start, end=end))
+        title = t["analysis"].format(name=profile["name"], start=start, end=end)
+        heading(title if title.startswith("🧠") else f"🧠 {title}")
         body = analysis.get("text", "")
         if len(body) > 2400:
             body = body[:2400] + "…"
+        bullets: list[str] = []
+
+        def flush_bullets():
+            if bullets:
+                rich.append("\n".join(bullets))
+                bullets.clear()
+
         for line in body.splitlines():
-            if line.strip() in labels["sections"]:
-                heading(line.strip(), 3)
-            elif line.strip():
+            stripped = line.strip()
+            if not stripped:
+                flush_bullets()
+                continue
+            if stripped in labels["sections"]:
+                flush_bullets()
+                heading(stripped, 3)
+            elif stripped.startswith(("• ", "- ")):
+                bullets.append(f"- {_md(stripped[2:].strip())}")
+                classic.append(escape(line))
+            else:
+                flush_bullets()
                 paragraph(line)
+        flush_bullets()
         if analysis.get("model"):
-            rich.append(f"<footer>{escape(analysis['model'])}</footer>")
+            rich.append(f"_{_md(analysis['model'])}_")
             classic.append(f"<i>{escape(analysis['model'])}</i>")
     else:
         paragraph(text[:3500])
-    return "".join(rich), "\n\n".join(classic)
+    return "\n\n".join(rich), "\n\n".join(classic)
 
 
 def telegram_enabled(chat_id: str | None = None) -> bool:
@@ -336,7 +369,7 @@ async def telegram(text: str, draft_id: int | None = None, chat_id: str | None =
             log.warning("Telegram card rendering failed (%s); using text", type(exc).__name__)
     if TELEGRAM_FORMAT in ("rich", "photo") and _rich_available:
         methods.append(("sendRichMessageDraft" if draft_id is not None else "sendRichMessage",
-                        {**base, "rich_message": {"html": rich}}))
+                        {**base, "rich_message": {"markdown": rich}}))
     methods.append(("sendMessageDraft" if draft_id is not None else "sendMessage",
                     {**base, "text": classic, "parse_mode": "HTML",
                      **({"link_preview_options": {"is_disabled": True}} if draft_id is None else {})}))
@@ -348,6 +381,7 @@ async def telegram(text: str, draft_id: int | None = None, chat_id: str | None =
             if method == "sendPhoto" and exc.code in (400, 404, 413, 501):
                 continue
             if method.startswith("sendRich") and exc.code in (400, 404, 501):
+                log.warning("Telegram %s rejected (API status %s); falling back to HTML", method, exc.code)
                 _rich_available = False
                 continue
             if exc.code == 429:

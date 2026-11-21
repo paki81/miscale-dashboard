@@ -75,9 +75,9 @@ def test_rich_measurement_escapes_names_and_formats_metrics(measurement, monkeyp
     rich, classic = notify.telegram_content("plain", measurement, profile, unit="kg", history=history, lang="it")
     assert "Alex &lt;admin&gt; &amp; friends" in rich and "<admin>" not in rich
     assert "80,00 kg" in rich and "−0,50 kg" in rich
-    assert "<table striped compact>" in rich and "<details>" in rich
+    assert "| Parametro | Valore |" in rich and "|:--|--:|" in rich and "<details>" in rich
     assert "Grasso corporeo" in rich and "20,0%" in rich and "500 Ω" in rich
-    assert "<table" not in classic and "<h2>" not in classic
+    assert "| Parametro |" not in classic and "## " not in classic
     assert "<b>" in classic and "80,00 kg" in classic
     lb, _ = notify.telegram_content("plain", measurement, profile, unit="lb", lang="en")
     assert "176.37 lb" in lb
@@ -98,16 +98,16 @@ def test_rich_analysis_escapes_provider_text():
          "text": "Cosa è migliorato\n• Peso medio in calo.\n\n<bad> & testo", "model": "test-model"}
     rich, classic = notify.telegram_content("plain", profile={"name": "Alex"}, analysis=a)
     assert "Analisi settimanale" in rich and "04/10" in rich and "10/10" in rich
-    assert "<h3>Cosa è migliorato</h3>" in rich
+    assert "### Cosa è migliorato" in rich and "- Peso medio in calo." in rich
     assert "&lt;bad&gt; &amp; testo" in rich and "<bad>" not in rich
-    assert "test-model" in rich and "&lt;bad&gt;" in classic
+    assert "_test-model_" in rich and "&lt;bad&gt;" in classic
 
 
 def test_telegram_rich_final_and_draft(telegram_calls):
     assert asyncio.run(notify.telegram("Test <unsafe>"))
     assert asyncio.run(notify.telegram("Draft", draft_id=7))
     assert [method for method, _ in telegram_calls] == ["sendRichMessage", "sendRichMessageDraft"]
-    assert "&lt;unsafe&gt;" in telegram_calls[0][1]["rich_message"]["html"]
+    assert "&lt;unsafe&gt;" in telegram_calls[0][1]["rich_message"]["markdown"]
     assert telegram_calls[0][1]["reply_markup"]["inline_keyboard"][0][0]["url"] == "http://dashboard.local:8800"
     assert telegram_calls[1][1]["draft_id"] == 7 and "reply_markup" not in telegram_calls[1][1]
 
