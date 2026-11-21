@@ -71,16 +71,19 @@ def measurement():
 def test_rich_measurement_escapes_names_and_formats_metrics(measurement, monkeypatch):
     monkeypatch.setattr(notify, "PUBLIC_URL", "")
     profile = {"name": "Alex <admin> & friends", "height_cm": 178, "birth": "1990-01-01"}
-    history = [{"measured_at": "2026-10-11T07:30:00", "weight_kg": 80.5}]
+    history = [{"measured_at": "2026-10-11T07:30:00", "weight_kg": 80.5, "impedance": 495,
+                "metrics": {"body_fat": 20.5, "muscle_mass": 59.5, "water": 55.0, "bmi": 25.4}}]
     rich, classic = notify.telegram_content("plain", measurement, profile, unit="kg", history=history, lang="it")
     assert "Alex &lt;admin&gt; &amp; friends" in rich and "<admin>" not in rich
-    assert "80,00 kg" in rich and "−0,50 kg" in rich
-    assert "| Parametro | Valore |" in rich and "|:--|--:|" in rich and "<details>" in rich
-    assert "Grasso corporeo" in rich and "20,0%" in rich and "500 Ω" in rich
+    assert "80,00 kg" in rich and "▼ 0,50 kg" in rich and "−0,50 kg" in rich
+    assert "| Parametro | Valore | Δ |" in rich and "|:--|--:|--:|" in rich and "<details>" in rich
+    assert "Grasso corporeo" in rich and "20,0%" in rich and "▼ 0,5%" in rich
+    assert "Muscoli" in rich and "▲ 0,5 kg" in rich and "| Acqua | **55,0%** | = |" in rich
+    assert "500 Ω" in rich and "▲ 5 Ω" in rich
     assert "| Parametro |" not in classic and "## " not in classic
     assert "<b>" in classic and "80,00 kg" in classic
     lb, _ = notify.telegram_content("plain", measurement, profile, unit="lb", lang="en")
-    assert "176.37 lb" in lb
+    assert "176.37 lb" in lb and "| Metric | Value |" in lb and "| Δ |" not in lb
 
 
 def test_rich_pending_and_missing_impedance(measurement):

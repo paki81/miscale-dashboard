@@ -96,10 +96,15 @@ def _link(m: dict | None) -> str:
     return f"{PUBLIC_URL}{'&' if '?' in PUBLIC_URL else '?'}m={m['id']}"
 
 
+def _prev(m: dict, history: list[dict]) -> dict | None:
+    when = datetime.fromisoformat(m["measured_at"])
+    return next((h for h in history if when - datetime.fromisoformat(h["measured_at"]) > timedelta(minutes=3)), None)
+
+
 def _trend(m: dict, history: list[dict], unit: str, lang: str) -> list[str]:
     t = TEXT.get(lang, TEXT["en"])
     when = datetime.fromisoformat(m["measured_at"])
-    prev = next((h for h in history if when - datetime.fromisoformat(h["measured_at"]) > timedelta(minutes=3)), None)
+    prev = _prev(m, history)
     trend = []
     if prev:
         d = m["weight_kg"] - prev["weight_kg"]
@@ -109,6 +114,18 @@ def _trend(m: dict, history: list[dict], unit: str, lang: str) -> list[str]:
     if len(week) > 1:
         trend.append(t["avg"].format(w=_mass(sum(week) / len(week), unit, 1, lang)))
     return trend
+
+
+def _delta(cur, prev, suffix: str, decimals: int, unit: str, lang: str) -> str:
+    if cur is None or prev is None:
+        return "—"
+    raw_diff = (cur - prev) / LB if suffix == "mass" and unit == "lb" else cur - prev
+    eps = 0.5 * 10 ** -decimals
+    if abs(raw_diff) < max(eps, 1e-9):
+        return "="
+    arrow = "▲" if raw_diff > 0 else "▼"
+    val = _mass(abs(cur - prev), unit, decimals, lang) if suffix == "mass" else _num(abs(raw_diff), decimals, lang) + suffix
+    return f"{arrow} {val}"
 
 
 def message(m: dict, profile: dict | None, history: list[dict], unit: str = "kg", lang: str = LANG) -> str:
@@ -205,12 +222,23 @@ def telegram_content(text: str, measurement: dict | None = None, profile: dict |
 
     if measurement and profile:
         heading(f"⚖️ {labels['measurement']} · {profile['name']}")
+        prev = _prev(measurement, history or [])
         weight_raw = _mass(measurement["weight_kg"], unit, 2, lang)
-        rich.append(f"### **{_md(weight_raw)}**")
+        weight_delta = _delta(measurement["weight_kg"], prev["weight_kg"], "mass", 2, unit, lang) if prev else ""
+        weight_head = f"### **{_md(weight_raw)}**  {_md(weight_delta)}" if weight_delta else f"### **{_md(weight_raw)}**"
+        rich.append(weight_head)
         classic.append(f"<b>{escape(weight_raw)}</b>")
         trends = _trend(measurement, history or [], unit, lang)
         if trends:
-            rich.append("\n".join(f"> {_md(line)}" for line in trends))
+            rich_trends = []
+            for idx, line in enumerate(trends):
+                if idx == 0 and prev:
+                    d = measurement["weight_kg"] - prev["weight_kg"]
+                    prefix = "▲ " if d > 0.005 else "▼ " if d < -0.005 else "= "
+                    rich_trends.append(f"> {prefix}{_md(line)}")
+                else:
+                    rich_trends.append(f"> {_md(line)}")
+            rich.append("\n".join(rich_trends))
             classic.extend(escape(line) for line in trends)
         when_str = datetime.fromisoformat(measurement["measured_at"]).strftime("%d/%m/%Y %H:%M")
         classic.append(escape(when_str))
@@ -220,22 +248,33 @@ def telegram_content(text: str, measurement: dict | None = None, profile: dict |
         else:
             rows, detail_rows = [], []
             metrics = measurement.get("metrics") or {}
+            prev_metrics = (prev.get("metrics") or {}) if prev else {}
+            show_delta = prev is not None
             for index, ((field, suffix, decimals), label) in enumerate(zip(METRIC_FIELDS, labels["labels"], strict=True)):
-                value = metrics.get(field)
-                if value is None:
+                raw_val = metrics.get(field)
+                if raw_val is None:
                     continue
-                value = _mass(value, unit, decimals, lang) if suffix == "mass" else _num(value, decimals, lang) + suffix
-                classic.append(f"<b>{escape(label)}</b>  {escape(value)}")
+                value = _mass(raw_val, unit, decimals, lang) if suffix == "mass" else _num(raw_val, decimals, lang) + suffix
+                delta = _delta(raw_val, prev_metrics.get(field), suffix, decimals, unit, lang) if show_delta else ""
+                classic.append(f"<b>{escape(label)}</b>  {escape(value)}" + (f" ({escape(delta)})" if delta and delta != "—" else ""))
                 if index < 4:
-                    rows.append(f"| {_md(label)} | **{_md(value)}** |")
+                    row = f"| {_md(label)} | **{_md(value)}** | {_md(delta)} |" if show_delta else f"| {_md(label)} | **{_md(value)}** |"
+                    rows.append(row)
                 else:
-                    detail_rows.append(f"| {_md(label)} | {_md(value)} |")
-            table_head = f"| {_md(labels['col_metric'])} | {_md(labels['col_value'])} |\n|:--|--:|"
+                    row = f"| {_md(label)} | {_md(value)} | {_md(delta)} |" if show_delta else f"| {_md(label)} | {_md(value)} |"
+                    detail_rows.append(row)
+            table_head = (f"| {_md(labels['col_metric'])} | {_md(labels['col_value'])} | Δ |\n|:--|--:|--:|"
+                          if show_delta else f"| {_md(labels['col_metric'])} | {_md(labels['col_value'])} |\n|:--|--:|")
             if rows:
                 rich.append("\n".join([table_head, *rows]))
             if measurement.get("impedance"):
                 imp_label = t["impedance"].format(imp=measurement["impedance"])
-                detail_rows.append(f"| {_md(imp_label.split()[0])} | {_md(str(measurement['impedance']) + ' Ω')} |")
+                imp_val = f"{measurement['impedance']} Ω"
+                if show_delta:
+                    imp_delta = _delta(measurement["impedance"], prev.get("impedance"), " Ω", 0, unit, lang)
+                    detail_rows.append(f"| {_md(imp_label.split()[0])} | {_md(imp_val)} | {_md(imp_delta)} |")
+                else:
+                    detail_rows.append(f"| {_md(imp_label.split()[0])} | {_md(imp_val)} |")
                 classic.append(escape(imp_label))
             else:
                 paragraph(t["no_impedance"])
