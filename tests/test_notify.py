@@ -76,7 +76,7 @@ def test_rich_measurement_escapes_names_and_formats_metrics(measurement, monkeyp
     rich, classic = notify.telegram_content("plain", measurement, profile, unit="kg", history=history, lang="it")
     assert "Alex &lt;admin&gt; &amp; friends" in rich and "<admin>" not in rich
     assert "80,00 kg" in rich and "▼ 0,50 kg" in rich and "−0,50 kg" in rich
-    assert "| Parametro | Valore | Δ |" in rich and "|:--|--:|--:|" in rich and "<details>" in rich
+    assert "| Parametro | Valore | Δ |" in rich and "|:--|--:|:--|" in rich and "<details>" in rich
     assert "Grasso corporeo" in rich and "20,0%" in rich and "▼ 0,5%" in rich
     assert "Muscoli" in rich and "▲ 0,5 kg" in rich and "| Acqua | **55,0%** | = |" in rich
     assert "500 Ω" in rich and "▲ 5 Ω" in rich

@@ -263,7 +263,7 @@ def telegram_content(text: str, measurement: dict | None = None, profile: dict |
                 else:
                     row = f"| {_md(label)} | {_md(value)} | {_md(delta)} |" if show_delta else f"| {_md(label)} | {_md(value)} |"
                     detail_rows.append(row)
-            table_head = (f"| {_md(labels['col_metric'])} | {_md(labels['col_value'])} | Δ |\n|:--|--:|--:|"
+            table_head = (f"| {_md(labels['col_metric'])} | {_md(labels['col_value'])} | Δ |\n|:--|--:|:--|"
                           if show_delta else f"| {_md(labels['col_metric'])} | {_md(labels['col_value'])} |\n|:--|--:|")
             if rows:
                 rich.append("\n".join([table_head, *rows]))
